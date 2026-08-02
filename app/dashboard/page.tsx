@@ -1,10 +1,15 @@
 import PageContainer from "@/components/layout/PageContainer";
 import StatCard from "@/components/dashboard/StatCard";
+import SearchPanel from "@/components/dashboard/SearchPanel";
+import ResultsTable from "@/components/dashboard/ResultsTable";
+
+import { mockCompanies } from "@/lib/mockCompanies";
 
 export default function Dashboard() {
   return (
     <PageContainer>
       <div className="space-y-8">
+
         <div>
           <h1 className="text-3xl font-bold">
             Dashboard
@@ -16,15 +21,16 @@ export default function Dashboard() {
         </div>
 
         <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-4">
+
           <StatCard
             title="Empresas"
-            value={0}
+            value={mockCompanies.length}
             description="Empresas registradas"
           />
 
           <StatCard
             title="Leads"
-            value={0}
+            value={mockCompanies.length}
             description="Leads encontrados"
           />
 
@@ -39,7 +45,13 @@ export default function Dashboard() {
             value={0}
             description="Seguimientos activos"
           />
+
         </div>
+
+        <SearchPanel />
+
+        <ResultsTable companies={mockCompanies} />
+
       </div>
     </PageContainer>
   );
