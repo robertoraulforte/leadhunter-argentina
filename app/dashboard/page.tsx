@@ -1,11 +1,35 @@
+"use client";
+
+import { useState } from "react";
+
 import PageContainer from "@/components/layout/PageContainer";
 import StatCard from "@/components/dashboard/StatCard";
 import SearchPanel from "@/components/dashboard/SearchPanel";
 import ResultsTable from "@/components/dashboard/ResultsTable";
 
 import { mockCompanies } from "@/lib/mockCompanies";
+import { SearchService } from "@/services/search/SearchService";
+import { Company } from "@/types/company";
 
 export default function Dashboard() {
+  const [companies, setCompanies] = useState<Company[]>([]);
+
+  const handleSearch = async (
+    rubro: string,
+    ciudad: string
+  ) => {
+    try {
+      const results = await SearchService.search(
+        rubro,
+        ciudad
+      );
+
+      setCompanies(results);
+    } catch (error) {
+      console.error("Error buscando empresas:", error);
+    }
+  };
+
   return (
     <PageContainer>
       <div className="space-y-8">
@@ -30,8 +54,8 @@ export default function Dashboard() {
 
           <StatCard
             title="Leads"
-            value={mockCompanies.length}
-            description="Leads encontrados"
+            value={companies.length}
+            description="Resultados de búsqueda"
           />
 
           <StatCard
@@ -48,9 +72,9 @@ export default function Dashboard() {
 
         </div>
 
-        <SearchPanel />
+        <SearchPanel onSearch={handleSearch} />
 
-        <ResultsTable companies={mockCompanies} />
+        <ResultsTable companies={companies} />
 
       </div>
     </PageContainer>

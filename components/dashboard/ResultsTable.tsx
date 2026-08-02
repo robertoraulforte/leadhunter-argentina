@@ -1,57 +1,59 @@
 import { Company } from "@/types/company";
 
-type ResultsTableProps = {
+type Props = {
   companies: Company[];
 };
 
 export default function ResultsTable({
   companies,
-}: ResultsTableProps) {
+}: Props) {
   return (
-    <div className="rounded-xl border bg-white shadow-sm overflow-hidden">
-      <table className="w-full">
-        <thead className="bg-gray-100">
-          <tr>
-            <th className="p-3 text-left">Empresa</th>
-            <th className="p-3 text-left">Ciudad</th>
-            <th className="p-3 text-left">Provincia</th>
-            <th className="p-3 text-left">Sitio Web</th>
-            <th className="p-3 text-left">Score</th>
-          </tr>
-        </thead>
+    <div className="rounded-xl border bg-white p-6 shadow-sm">
 
-        <tbody>
-          {companies.map((company) => (
-            <tr
-              key={company.id}
-              className="border-t hover:bg-gray-50"
-            >
-              <td className="p-3">{company.name}</td>
-              <td className="p-3">{company.city}</td>
-              <td className="p-3">{company.province}</td>
+      <h2 className="mb-5 text-xl font-semibold">
+        Resultados
+      </h2>
 
-              <td className="p-3">
-                {company.website ? (
-                  <a
-                    href={company.website}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="text-blue-600"
-                  >
-                    Ver sitio
-                  </a>
-                ) : (
-                  "No tiene"
-                )}
-              </td>
+      {companies.length === 0 ? (
+        <p>No hay resultados.</p>
+      ) : (
+        <table className="w-full">
 
-              <td className="p-3 font-bold">
-                {company.score}
-              </td>
+          <thead>
+
+            <tr>
+
+              <th>Empresa</th>
+
+              <th>Ciudad</th>
+
+              <th>Web</th>
+
             </tr>
-          ))}
-        </tbody>
-      </table>
+
+          </thead>
+
+          <tbody>
+
+            {companies.map((company) => (
+
+              <tr key={company.id}>
+
+                <td>{company.name}</td>
+
+                <td>{company.city}</td>
+
+                <td>{company.website || "-"}</td>
+
+              </tr>
+
+            ))}
+
+          </tbody>
+
+        </table>
+      )}
+
     </div>
   );
 }
