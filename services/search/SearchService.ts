@@ -1,25 +1,14 @@
-import { Company } from "@/types/company";
 import { OverpassProvider } from "@/services/apis/OverpassProvider";
-import { getCoordinates } from "@/services/apis/Geocoder";
-
-const provider = new OverpassProvider();
+import { Company } from "@/types/company";
 
 export class SearchService {
-  static async search(
-    rubro: string,
-    ciudad: string
-  ): Promise<Company[]> {
+  private provider = new OverpassProvider();
 
-    const coordinates = await getCoordinates(ciudad);
+  async execute(rubro: string, ciudad: string): Promise<Company[]> {
+    return this.provider.search(rubro, ciudad);
+  }
 
-    if (!coordinates) {
-      return [];
-    }
-
-    return provider.search(
-      coordinates.lat,
-      coordinates.lon,
-      rubro
-    );
+  async search(rubro: string, ciudad: string): Promise<Company[]> {
+    return this.execute(rubro, ciudad);
   }
 }

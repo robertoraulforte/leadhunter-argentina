@@ -1,44 +1,45 @@
 import { Company } from "@/types/company";
+import { calculateScore } from "@/services/scoring/Scorer";
 
 interface OverpassElement {
-  lat?: number;
-  lon?: number;
-  center?: {
-    lat: number;
-    lon: number;
-  };
-  tags?: {
-    name?: string;
-    shop?: string;
-    phone?: string;
-    website?: string;
-    email?: string;
-    ["addr:street"]?: string;
-    ["addr:city"]?: string;
-  };
+  id: number | string;
+  tags?: Record<string, string>;
+  [key: string]: unknown;
 }
 
-export function normalize(
-  elements: OverpassElement[]
-): Company[] {
-  return elements.map((item, index) => {
-    const tags = item.tags ?? {};
+export function normalize(elements: unknown[]): Company[] {
+  if (!Array.isArray(elements)) return [];
 
-    return {
-      id: String(index),
-      name: tags.name ?? "Sin nombre",
-      category: tags.shop ?? "",
-      address: tags["addr:street"] ?? "",
-      city: tags["addr:city"] ?? "",
-      province: "",
-      phone: tags.phone ?? "",
-      website: tags.website ?? "",
-      email: tags.email ?? "",
-      whatsapp: "",
-      latitude: item.lat ?? item.center?.lat ?? 0,
-      longitude: item.lon ?? item.center?.lon ?? 0,
-      source: "OpenStreetMap",
-      score: 0,
-    };
-  });
+  const validElements = elements as OverpassElement[];
+
+  return validElements
+    .filter((el) => el.tags && el.tags.name)
+    .map((el) => {
+      const tags = el.tags || {};
+
+      const addressParts = [
+        tags["addr:street"],
+        tags["addr:housenumber"]
+      ].filter(Boolean).join(" ");
+
+      const rawPhone = tags.phone || tags["contact:phone"] || tags["contact:mobile"] || "";
+      const rawWebsite = tags.website || tags["contact:website"] || "";
+
+      const companyData: Partial<Company> = {
+        id: String(el.id),
+        name: tags.name,
+        address: addressParts || tags["addr:full"] || undefined,
+        website: rawWebsite || undefined,
+        phone: rawPhone || undefined,
+        whatsapp: (rawPhone.includes("+54") || rawPhone.startsWith("11") || rawPhone.startsWith("223") || rawPhone.startsWith("2266")) ? rawPhone : undefined,
+        category: tags.shop || tags.amenity || "Comercio",
+      };
+
+      const score = calculateScore(companyData);
+
+      return {
+        ...companyData,
+        score,
+      } as Company;
+    });
 }

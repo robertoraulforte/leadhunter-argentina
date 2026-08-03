@@ -1,60 +1,46 @@
-import { buildQuery } from "./OverpassQuery";
+import { OverpassQuery } from "./OverpassQuery";
 import { normalize } from "@/services/search/Normalizer";
 import { dedupe } from "@/services/search/Deduper";
+import { Company } from "@/types/company";
+
+const OVERPASS_ENDPOINTS = [
+  "https://overpass.kumi.systems/api/interpreter",
+  "https://overpass-api.de/api/interpreter",
+  "https://lz4.overpass-api.de/api/interpreter",
+  "https://overpass.private.coffee/api/interpreter",
+];
 
 export class OverpassProvider {
-  // Endpoints ultrarrápidos y de alta disponibilidad
-  private endpoints = [
-    "https://overpass-api.de/api/interpreter",
-    "https://overpass.private.coffee/api/interpreter",
-    "https://lz4.overpass-api.de/api/interpreter",
-    "https://overpass.kumi.systems/api/interpreter",
-  ];
+  async search(rubro: string, ciudad: string): Promise<Company[]> {
+    const query = OverpassQuery.build(rubro, ciudad);
 
-  async search(
-    lat: number,
-    lon: number,
-    category: string
-  ) {
-    const query = buildQuery(lat, lon, category);
-    let lastErrorText = "";
-    let lastStatus = 0;
-
-    for (const endpoint of this.endpoints) {
+    for (const endpoint of OVERPASS_ENDPOINTS) {
       try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 6000);
+
         const response = await fetch(endpoint, {
           method: "POST",
           headers: {
             "Content-Type": "application/x-www-form-urlencoded",
-            "Accept": "application/json",
-            "User-Agent": "LeadHunterArgentina/1.0",
           },
           body: `data=${encodeURIComponent(query)}`,
-          signal: AbortSignal.timeout(7000), // 7 segundos max por endpoint
+          signal: controller.signal,
         });
 
+        clearTimeout(timeoutId);
+
         if (response.ok) {
-          const data = await response.json();
-          const companies = normalize(data.elements);
-          return dedupe(companies);
+          const data = (await response.json()) as { elements?: unknown[] };
+          const normalized = normalize(data.elements || []);
+          return dedupe(normalized);
         }
-
-        lastStatus = response.status;
-        lastErrorText = await response.text();
-
-        console.warn(`[OverpassProvider] Falló ${endpoint} con status ${response.status}`);
       } catch {
-        console.warn(`[OverpassProvider] Timeout o error de red conectando a ${endpoint}`);
+        console.warn(`[OverpassProvider] Falló endpoint ${endpoint}, reintentando...`);
       }
     }
 
-    console.error("====================================");
-    console.error("OVERPASS ERROR (ALL ENDPOINTS FAILED)");
-    console.error("LAST STATUS:", lastStatus);
-    console.error("LAST BODY:");
-    console.error(lastErrorText);
-    console.error("====================================");
-
-    throw new Error(`Overpass HTTP ${lastStatus || "Timeout/Network Error"}`);
+    console.error("[OverpassProvider] Todos los servidores de Overpass fallaron o expiraron.");
+    return [];
   }
 }
