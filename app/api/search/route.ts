@@ -1,9 +1,8 @@
 import { NextResponse } from "next/server";
-import { OverpassProvider } from "@/services/apis/OverpassProvider";
-
-const provider = new OverpassProvider();
+import { SearchService } from "@/services/search/SearchService";
 
 export async function GET(request: Request) {
+
   const { searchParams } = new URL(request.url);
 
   const rubro = searchParams.get("rubro") || "";
@@ -11,18 +10,40 @@ export async function GET(request: Request) {
 
   if (!rubro || !ciudad) {
     return NextResponse.json(
-      { error: "Debe indicar rubro y ciudad" },
-      { status: 400 }
+      {
+        error: "Debe indicar rubro y ciudad"
+      },
+      {
+        status: 400
+      }
     );
   }
 
-  const companies = await provider.search(
-    rubro,
-    ciudad
-  );
+  try {
 
-  return NextResponse.json({
-    success: true,
-    results: companies,
-  });
+    const companies = await SearchService.search(
+      rubro,
+      ciudad
+    );
+
+    return NextResponse.json({
+      success: true,
+      results: companies
+    });
+
+  } catch (error) {
+
+    console.error(error);
+
+    return NextResponse.json(
+      {
+        success: false,
+        error: "Error buscando empresas"
+      },
+      {
+        status: 500
+      }
+    );
+
+  }
 }
