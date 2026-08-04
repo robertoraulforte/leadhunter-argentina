@@ -1,17 +1,24 @@
 export class OverpassQuery {
-  static build(rubro: string, ciudad: string): string {
-    const cleanRubro = rubro.toLowerCase().trim();
-    const cleanCiudad = ciudad.trim();
+  static build(
+    lat: number,
+    lon: number,
+    category: string
+  ): string {
 
     return `
-      [out:json][timeout:5];
-      area["name"="${cleanCiudad}"]["boundary"="administrative"]->.searchArea;
-      (
-        node["shop"="${cleanRubro}"](area.searchArea);
-        node["amenity"="${cleanRubro}"](area.searchArea);
-        node["name"~"${cleanRubro}", i](area.searchArea);
-      );
-      out body 30;
-    `;
+[out:json][timeout:25];
+
+(
+  node["shop"="${category}"](around:10000,${lat},${lon});
+  way["shop"="${category}"](around:10000,${lat},${lon});
+  relation["shop"="${category}"](around:10000,${lat},${lon});
+
+  node["amenity"="${category}"](around:10000,${lat},${lon});
+  way["amenity"="${category}"](around:10000,${lat},${lon});
+  relation["amenity"="${category}"](around:10000,${lat},${lon});
+);
+
+out center tags;
+`;
   }
 }
