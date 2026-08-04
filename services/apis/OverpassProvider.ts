@@ -1,9 +1,8 @@
 import { Company } from "@/types/company";
-
+import { SearchProvider } from "./SearchProvider";
 import { OverpassQuery } from "./OverpassQuery";
 import { getCoordinates } from "./Geocoder";
 import { CategoryTranslator } from "./CategoryTranslator";
-
 import { normalize } from "@/services/search/Normalizer";
 import { dedupe } from "@/services/search/Deduper";
 
@@ -14,17 +13,18 @@ const OVERPASS_ENDPOINTS = [
   "https://overpass.private.coffee/api/interpreter",
 ];
 
-export class OverpassProvider {
+export class OverpassProvider implements SearchProvider {
+
+  readonly name = "Overpass";
+
   async search(
     rubro: string,
     ciudad: string
   ): Promise<Company[]> {
 
-    // Traducción automática
     const category =
       CategoryTranslator.translate(rubro);
 
-    // Obtener coordenadas
     const coordinates =
       await getCoordinates(ciudad);
 
@@ -35,14 +35,16 @@ export class OverpassProvider {
       return [];
     }
 
-    // Construir consulta
     const query = OverpassQuery.build(
       coordinates.lat,
       coordinates.lon,
       category
     );
 
-    // Intentar todos los servidores
+    console.log("========== OVERPASS QUERY ==========");
+    console.log(query);
+    console.log("===================================");
+
     for (const endpoint of OVERPASS_ENDPOINTS) {
 
       try {
@@ -67,17 +69,13 @@ export class OverpassProvider {
             headers: {
               "Content-Type":
                 "application/x-www-form-urlencoded",
-
               "Accept":
                 "application/json",
-
               "User-Agent":
                 "LeadHunterArgentina/1.0",
             },
-
             body:
               `data=${encodeURIComponent(query)}`,
-
             signal:
               controller.signal,
           }
@@ -97,11 +95,10 @@ export class OverpassProvider {
         const data =
           await response.json();
 
-        const normalized =
-          normalize(data.elements ?? []);
-
         const companies =
-          dedupe(normalized);
+          dedupe(
+            normalize(data.elements ?? [])
+          );
 
         console.log(
           `[Overpass] ${companies.length} empresas encontradas`
@@ -117,6 +114,7 @@ export class OverpassProvider {
         );
 
       }
+
     }
 
     console.error(

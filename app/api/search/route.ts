@@ -1,22 +1,61 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { SearchService } from "@/services/search/SearchService";
 
-const searchService = new SearchService();
+export async function GET(
+  request: NextRequest
+) {
 
-export async function GET(request: Request) {
-  const { searchParams } = new URL(request.url);
-  const rubro = searchParams.get("rubro") || "";
-  const ciudad = searchParams.get("ciudad") || "";
+  const { searchParams } =
+    new URL(request.url);
+
+  const rubro =
+    searchParams.get("rubro");
+
+  const ciudad =
+    searchParams.get("ciudad");
 
   if (!rubro || !ciudad) {
-    return NextResponse.json({ error: "Faltan parámetros rubro o ciudad" }, { status: 400 });
+
+    return NextResponse.json(
+      {
+        error:
+          "Debe indicar rubro y ciudad."
+      },
+      {
+        status: 400
+      }
+    );
+
   }
 
   try {
-    const results = await searchService.execute(rubro, ciudad);
-    return NextResponse.json(results);
+
+    const results =
+      await SearchService.search(
+        rubro,
+        ciudad
+      );
+
+    return NextResponse.json({
+      success: true,
+      results
+    });
+
   } catch (error) {
-    console.error("Error en la búsqueda:", error);
-    return NextResponse.json([], { status: 200 });
+
+    console.error(error);
+
+    return NextResponse.json(
+      {
+        success: false,
+        error:
+          "Error interno del servidor."
+      },
+      {
+        status: 500
+      }
+    );
+
   }
+
 }
