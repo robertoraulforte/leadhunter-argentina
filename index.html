@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="es-AR" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LeadHunter Argentina – Venta de Páginas Web</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- FontAwesome CDN -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        ar: { 
+                            blue: '#3B82F6', 
+                            darkBg: '#0F172A',
+                            cardBg: '#1E293B',
+                            border: '#334155',
+                            lightText: '#94A3B8'
+                        }
+                    },
+                    fontFamily: { sans: ['Inter', 'system-ui', 'sans-serif'] }
+                }
+            }
+        }
+    </script>
+    <style>
+        body { font-family: 'Inter', sans-serif; }
+        .card-hover { transition: all 0.3s ease; }
+        .card-hover:hover { transform: translateY(-4px); box-shadow: 0 10px 25px rgba(59, 130, 246, 0.2); }
+    </style>
+</head>
+<body class="bg-ar-darkBg text-slate-100 min-h-screen">
+
+    <!-- Header -->
+    <header class="bg-slate-900 border-b border-ar-border shadow-lg sticky top-0 z-50">
+        <div class="container mx-auto px-4 py-4 flex justify-between items-center">
+            <div class="flex items-center gap-3">
+                <i class="fa-solid fa-crosshairs text-xl text-ar-blue"></i>
+                <h1 class="text-xl font-bold tracking-wide text-white">LeadHunter <span class="text-ar-blue">Argentina</span></h1>
+            </div>
+            <p class="text-sm text-ar-lightText hidden md:block">Prospección profesional e Inteligencia de ventas 🇦🇷</p>
+        </div>
+    </header>
+
+    <main class="container mx-auto px-4 py-8">
+        <!-- Introducción -->
+        <section class="mb-8 text-center">
+            <h2 class="text-2xl md:text-3xl font-bold mb-3 text-white">Búsqueda Multiproveedor de Prospectos</h2>
+            <p class="text-ar-lightText max-w-2xl mx-auto">Motor unificado que consulta Overpass, DuckDuckGo y directorios locales para auditar oportunidades de páginas web.</p>
+        </section>
+
+        <!-- Filtros -->
+        <section class="bg-ar-cardBg border border-ar-border rounded-xl shadow-xl p-6 mb-8">
+            <h3 class="text-lg font-semibold mb-4 flex items-center gap-2 text-white"><i class="fa-solid fa-filter text-ar-blue"></i> Filtros de Búsqueda</h3>
+            <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+                <div>
+                    <label for="provincia" class="block text-sm font-medium mb-1.5 text-slate-300">Provincia</label>
+                    <select id="provincia" class="w-full bg-slate-900 border border-ar-border text-slate-200 rounded-lg p-2.5 focus:border-ar-blue focus:outline-none">
+                        <option value="todas">Todas</option>
+                        <option value="caba">CABA</option>
+                        <option value="bsas">Buenos Aires</option>
+                        <option value="cordoba">Córdoba</option>
+                        <option value="santa-fe">Santa Fe</option>
+                        <option value="entre-rios">Entre Ríos</option>
+                    </select>
+                </div>
+                <div>
+                    <label for="rubro" class="block text-sm font-medium mb-1.5 text-slate-300">Rubro / Actividad</label>
+                    <select id="rubro" class="w-full bg-slate-900 border border-ar-border text-slate-200 rounded-lg p-2.5 focus:border-ar-blue focus:outline-none">
+                        <option value="todos">Todos</option>
+                        <option value="comercio">Comercio y Tiendas</option>
+                        <option value="servicios">Servicios Profesionales</option>
+                        <option value="salud">Salud y Estética</option>
+                        <option value="logistica">Industria y Logística</option>
+                    </select>
+                </div>
+                <div>
+                    <label for="tamano" class="block text-sm font-medium mb-1.5 text-slate-300">Tamaño</label>
+                    <select id="tamano" class="w-full bg-slate-900 border border-ar-border text-slate-200 rounded-lg p-2.5 focus:border-ar-blue focus:outline-none">
+                        <option value="todos">Todos</option>
+                        <option value="mono">Monotributo / Emprendedores</option>
+                        <option value="pyme">PyMEs</option>
+                        <option value="empresa">Empresas Medianas/Grandes</option>
+                    </select>
+                </div>
+                <div>
+                    <label for="necesidad" class="block text-sm font-medium mb-1.5 text-slate-300">Necesidad Web</label>
+                    <select id="necesidad" class="w-full bg-slate-900 border border-ar-border text-slate-200 rounded-lg p-2.5 focus:border-ar-blue focus:outline-none">
+                        <option value="cualquiera">Cualquiera</option>
+                        <option value="sin-web">Sin sitio web</option>
+                        <option value="web-obsoleta">Sitio desactualizado</option>
+                        <option value="mejora">Necesita modernizar</option>
+                    </select>
+                </div>
+            </div>
+            <div class="mt-5 flex gap-3">
+                <button id="buscarBtn" class="bg-blue-600 hover:bg-blue-500 text-white px-6 py-2.5 rounded-lg font-medium transition flex items-center">
+                    <i class="fa-solid fa-magnifying-glass mr-2"></i> Buscar Leads
+                </button>
+            </div>
+        </section>
+
+        <!-- Resultados -->
+        <section class="mb-8">
+            <h3 class="text-xl font-semibold mb-4 text-white flex items-center justify-between">
+                <span><i class="fa-solid fa-list-check mr-2 text-ar-blue"></i> Resultados Unificados</span>
+                <span id="contadorLeads" class="text-sm font-normal text-ar-lightText">Esperando consulta...</span>
+            </h3>
+            
+            <div id="resultados" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                <!-- Se renderiza desde js/app.js -->
+            </div>
+        </section>
+    </main>
+
+    <!-- Conexión al Pipeline JS (vía Módulo ES6) -->
+    <script type="module" src="./js/app.js"></script>
+</body>
+</html>
