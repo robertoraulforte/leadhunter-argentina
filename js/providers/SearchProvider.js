@@ -14,6 +14,6 @@ export class SearchProvider {
      * @returns {Promise<import('../models/Lead.js').Lead[]>}
      */
     async search(filters) {
-        throw new Error(`El método search() debe ser implementado en ${this.name}`);
+        throw new Error(`El método search() debe ser implementado en ${this.name}. Filtros recibidos: ${JSON.stringify(filters)}`);
     }
 }
