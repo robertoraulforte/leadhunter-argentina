@@ -2,7 +2,6 @@
 
 import { useState } from 'react';
 
-// Interfaz para tipar los resultados sin usar 'any'
 interface LeadResult {
   id: string;
   nombre: string;
@@ -21,10 +20,12 @@ export default function BuscadorLeads() {
   const [ciudad, setCiudad] = useState('');
   const [provincia, setProvincia] = useState('todas');
   
-  // Usamos el tipo explicitado
   const [leads, setLeads] = useState<LeadResult[]>([]);
   const [loading, setLoading] = useState(false);
   const [searched, setSearched] = useState(false);
+
+  // ID del lead que se está guardando en el momento
+  const [savingId, setSavingId] = useState<string | null>(null);
 
   const handleSearch = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -53,6 +54,41 @@ export default function BuscadorLeads() {
       setLeads([]);
     } finally {
       setLoading(false);
+    }
+  };
+
+  // 🔹 NUEVA FUNCIÓN: Enviar lead a Prisma BD
+  const handleSaveLead = async (lead: LeadResult) => {
+    setSavingId(lead.id);
+
+    try {
+      const res = await fetch('/api/leads', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          name: lead.nombre,
+          category: lead.rubro,
+          city: lead.ciudad,
+          province: lead.provincia,
+          phone: lead.telefono,
+          email: lead.email,
+        }),
+      });
+
+      const data = await res.json();
+
+      if (data.success) {
+        alert(`¡Lead "${lead.nombre}" guardado con éxito en el CRM!`);
+      } else {
+        alert(`Error al guardar: ${data.error || 'Intente nuevamente'}`);
+      }
+    } catch (err) {
+      console.error('Error al guardar lead:', err);
+      alert('Error de conexión al guardar el lead.');
+    } finally {
+      setSavingId(null);
     }
   };
 
@@ -155,8 +191,13 @@ export default function BuscadorLeads() {
                   </div>
                 </div>
 
-                <button className="w-full bg-slate-800 hover:bg-slate-700 text-blue-400 border border-slate-700 py-2 rounded-lg text-sm font-medium transition">
-                  Guardar en Favoritos / CRM
+                {/* 🔹 BOTÓN CONECTADO A PRISMA */}
+                <button 
+                  onClick={() => handleSaveLead(lead)}
+                  disabled={savingId === lead.id}
+                  className="w-full bg-slate-800 hover:bg-slate-700 disabled:opacity-50 text-blue-400 border border-slate-700 py-2 rounded-lg text-sm font-medium transition"
+                >
+                  {savingId === lead.id ? 'Guardando...' : 'Guardar en Favoritos / CRM'}
                 </button>
               </div>
             ))}
