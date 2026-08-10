@@ -3,12 +3,25 @@
 import { SearchProvider } from './SearchProvider.js';
 import { Lead } from '../models/Lead.js';
 
+/*
+ * ============================================================
+ * SERVIDORES OVERPASS
+ * ============================================================
+ *
+ * Si uno está saturado o devuelve 504,
+ * probamos automáticamente el siguiente.
+ */
 const OVERPASS_ENDPOINTS = [
     'https://overpass-api.de/api/interpreter',
     'https://overpass.kumi.systems/api/interpreter',
-    'https://overpass.private.coffee/api/interpreter',
+    'https://overpass.private.coffee/api/interpreter'
 ];
 
+/*
+ * ============================================================
+ * CATEGORÍAS OSM
+ * ============================================================
+ */
 const CATEGORY_MAP = {
     farmacia: {
         amenity: 'pharmacy'
@@ -22,23 +35,11 @@ const CATEGORY_MAP = {
         shop: 'hardware'
     },
 
-    ferretería: {
-        shop: 'hardware'
-    },
-
     gomeria: {
         shop: 'tyres'
     },
 
-    gomería: {
-        shop: 'tyres'
-    },
-
     neumaticos: {
-        shop: 'tyres'
-    },
-
-    neumáticos: {
         shop: 'tyres'
     },
 
@@ -54,15 +55,7 @@ const CATEGORY_MAP = {
         shop: 'bakery'
     },
 
-    panadería: {
-        shop: 'bakery'
-    },
-
     libreria: {
-        shop: 'books'
-    },
-
-    librería: {
         shop: 'books'
     },
 
@@ -71,10 +64,6 @@ const CATEGORY_MAP = {
     },
 
     peluqueria: {
-        shop: 'hairdresser'
-    },
-
-    peluquería: {
         shop: 'hairdresser'
     },
 
@@ -94,10 +83,6 @@ const CATEGORY_MAP = {
         amenity: 'cafe'
     },
 
-    café: {
-        amenity: 'cafe'
-    },
-
     veterinaria: {
         amenity: 'veterinary'
     },
@@ -111,6 +96,69 @@ const CATEGORY_MAP = {
     }
 };
 
+/*
+ * ============================================================
+ * NORMALIZACIÓN DE TEXTO
+ * ============================================================
+ *
+ * Permite que:
+ *
+ * farmacia
+ * Farmacia
+ * FARMACIA
+ *
+ * sean tratados igual.
+ *
+ * También elimina acentos.
+ */
+function normalizeText(value) {
+
+    return String(value || '')
+        .trim()
+        .toLowerCase()
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '');
+}
+
+/*
+ * ============================================================
+ * NOMBRE DE PROVINCIA
+ * ============================================================
+ */
+function getProvinceName(provincia) {
+    const map = {
+        bsas: 'Buenos Aires',
+        caba: 'Ciudad Autónoma de Buenos Aires',
+        cordoba: 'Córdoba',
+        'santa-fe': 'Santa Fe',
+        'entre-rios': 'Entre Ríos',
+        mendoza: 'Mendoza',
+        tucuman: 'Tucumán',
+        salta: 'Salta',
+        neuquen: 'Neuquén',
+        chubut: 'Chubut',
+        'rio-negro': 'Río Negro',
+        misiones: 'Misiones',
+        corrientes: 'Corrientes',
+        chaco: 'Chaco',
+        formosa: 'Formosa',
+        jujuy: 'Jujuy',
+        catamarca: 'Catamarca',
+        'la-rioja': 'La Rioja',
+        'san-juan': 'San Juan',
+        'san-luis': 'San Luis',
+        'santa-cruz': 'Santa Cruz',
+        'tierra-del-fuego': 'Tierra del Fuego'
+    };
+
+    return map[provincia] || provincia;
+}
+
+/*
+ * ============================================================
+ * PROVIDER
+ * ============================================================
+ */
 export class OverpassProvider extends SearchProvider {
 
     constructor() {
@@ -119,25 +167,24 @@ export class OverpassProvider extends SearchProvider {
 
     async search(filters) {
 
-        const rubro = String(
+        const rubroOriginal = String(
             filters.rubro || ''
-        )
-            .trim()
-            .toLowerCase();
+        ).trim();
+
+        const rubro = normalizeText(rubroOriginal);
 
         const ciudad = String(
             filters.ciudad || ''
-        )
-            .trim();
+        ).trim();
 
         console.log(
-            `[OverpassProvider] Buscando "${rubro}" en "${ciudad}"`
+            `[OverpassProvider] Buscando "${rubroOriginal}" en "${ciudad}"`
         );
 
         /*
-         * ========================================
+         * ========================================================
          * 1. GEOCODIFICAR CIUDAD
-         * ========================================
+         * ========================================================
          */
 
         let lat;
@@ -145,14 +192,20 @@ export class OverpassProvider extends SearchProvider {
 
         try {
 
+            const params = new URLSearchParams({
+                q: `${ciudad}, Argentina`,
+                format: 'json',
+                limit: '1',
+                countrycodes: 'ar',
+                addressdetails: '1'
+            });
+
             const geoUrl =
-                'https://nominatim.openstreetmap.org/search?' +
-                new URLSearchParams({
-                    q: `${ciudad}, Argentina`,
-                    format: 'json',
-                    limit: '1',
-                    countrycodes: 'ar'
-                });
+                `https://nominatim.openstreetmap.org/search?${params.toString()}`;
+
+            console.log(
+                `[Nominatim] Buscando coordenadas para ${ciudad}`
+            );
 
             const geoResponse = await fetch(
                 geoUrl,
@@ -161,12 +214,16 @@ export class OverpassProvider extends SearchProvider {
                         'User-Agent':
                             'LeadHunterArgentina/1.0'
                     },
+
                     cache: 'no-store',
-                    signal: AbortSignal.timeout(10000)
+
+                    signal:
+                        AbortSignal.timeout(10000)
                 }
             );
 
             if (!geoResponse.ok) {
+
                 throw new Error(
                     `Nominatim HTTP ${geoResponse.status}`
                 );
@@ -179,18 +236,24 @@ export class OverpassProvider extends SearchProvider {
                 !Array.isArray(geoData) ||
                 geoData.length === 0
             ) {
+
                 console.warn(
-                    `[OverpassProvider] No se encontraron coordenadas para ${ciudad}`
+                    `[Nominatim] No se encontraron coordenadas para ${ciudad}`
                 );
 
                 return [];
             }
 
-            lat = Number(geoData[0].lat);
-            lon = Number(geoData[0].lon);
+            lat = Number(
+                geoData[0].lat
+            );
+
+            lon = Number(
+                geoData[0].lon
+            );
 
             console.log(
-                `[OverpassProvider] Coordenadas ${ciudad}: ${lat}, ${lon}`
+                `[Nominatim] ${ciudad}: ${lat}, ${lon}`
             );
 
         } catch (error) {
@@ -204,9 +267,9 @@ export class OverpassProvider extends SearchProvider {
         }
 
         /*
-         * ========================================
-         * 2. DETERMINAR CATEGORÍA OSM
-         * ========================================
+         * ========================================================
+         * 2. BUSCAR CATEGORÍA OSM
+         * ========================================================
          */
 
         const category =
@@ -215,16 +278,31 @@ export class OverpassProvider extends SearchProvider {
         if (!category) {
 
             console.warn(
-                `[OverpassProvider] Rubro no mapeado: ${rubro}`
+                `[OverpassProvider] Rubro no mapeado: "${rubroOriginal}"`
             );
 
             return [];
         }
 
         /*
-         * ========================================
-         * 3. CONSTRUIR CONSULTA
-         * ========================================
+         * ========================================================
+         * 3. RADIO DE BÚSQUEDA
+         * ========================================================
+         *
+         * 10 km inicialmente.
+         *
+         * Es bastante más liviano que los 15 km anteriores.
+         */
+
+        const radius = 10000;
+
+        /*
+         * ========================================================
+         * 4. CONSTRUIR QUERY
+         * ========================================================
+         *
+         * Eliminamos RELATION porque genera bastante carga
+         * y para negocios normalmente node + way es suficiente.
          */
 
         const queryParts = [];
@@ -232,50 +310,38 @@ export class OverpassProvider extends SearchProvider {
         if (category.shop) {
 
             queryParts.push(
-                `node["shop"="${category.shop}"](around:15000,${lat},${lon});`
+                `node["shop"="${category.shop}"](around:${radius},${lat},${lon});`
             );
 
             queryParts.push(
-                `way["shop"="${category.shop}"](around:15000,${lat},${lon});`
-            );
-
-            queryParts.push(
-                `relation["shop"="${category.shop}"](around:15000,${lat},${lon});`
+                `way["shop"="${category.shop}"](around:${radius},${lat},${lon});`
             );
         }
 
         if (category.amenity) {
 
             queryParts.push(
-                `node["amenity"="${category.amenity}"](around:15000,${lat},${lon});`
+                `node["amenity"="${category.amenity}"](around:${radius},${lat},${lon});`
             );
 
             queryParts.push(
-                `way["amenity"="${category.amenity}"](around:15000,${lat},${lon});`
-            );
-
-            queryParts.push(
-                `relation["amenity"="${category.amenity}"](around:15000,${lat},${lon});`
+                `way["amenity"="${category.amenity}"](around:${radius},${lat},${lon});`
             );
         }
 
         if (category.tourism) {
 
             queryParts.push(
-                `node["tourism"="${category.tourism}"](around:15000,${lat},${lon});`
+                `node["tourism"="${category.tourism}"](around:${radius},${lat},${lon});`
             );
 
             queryParts.push(
-                `way["tourism"="${category.tourism}"](around:15000,${lat},${lon});`
-            );
-
-            queryParts.push(
-                `relation["tourism"="${category.tourism}"](around:15000,${lat},${lon});`
+                `way["tourism"="${category.tourism}"](around:${radius},${lat},${lon});`
             );
         }
 
         const query = `
-[out:json][timeout:20];
+[out:json][timeout:15];
 
 (
     ${queryParts.join('\n    ')}
@@ -295,17 +361,24 @@ out center tags;
         );
 
         /*
-         * ========================================
-         * 4. PROBAR SERVIDORES
-         * ========================================
+         * ========================================================
+         * 5. PROBAR SERVIDORES
+         * ========================================================
          */
 
-        for (const endpoint of OVERPASS_ENDPOINTS) {
+        for (
+            let index = 0;
+            index < OVERPASS_ENDPOINTS.length;
+            index++
+        ) {
+
+            const endpoint =
+                OVERPASS_ENDPOINTS[index];
 
             try {
 
                 console.log(
-                    `[OverpassProvider] Probando ${endpoint}`
+                    `[OverpassProvider] Servidor ${index + 1}/${OVERPASS_ENDPOINTS.length}: ${endpoint}`
                 );
 
                 const response =
@@ -330,9 +403,16 @@ out center tags;
                                 encodeURIComponent(query),
 
                             signal:
-                                AbortSignal.timeout(30000)
+                                AbortSignal.timeout(20000)
                         }
                     );
+
+                /*
+                 * ------------------------------------------------
+                 * Si devuelve 429 / 502 / 503 / 504,
+                 * probamos automáticamente otro servidor.
+                 * ------------------------------------------------
+                 */
 
                 if (!response.ok) {
 
@@ -359,92 +439,129 @@ out center tags;
                 }
 
                 /*
-                 * ========================================
-                 * 5. CONVERTIR RESULTADOS
-                 * ========================================
+                 * =================================================
+                 * 6. CONVERTIR OSM -> LEAD
+                 * =================================================
                  */
 
-                const leads = data.elements
-                    .filter(
-                        item =>
-                            item.tags &&
-                            item.tags.name
-                    )
-                    .map(item => {
+                const leads =
+                    data.elements
 
-                        const tags =
-                            item.tags;
+                        .filter(
+                            item =>
+                                item.tags &&
+                                item.tags.name
+                        )
 
-                        const itemLat =
-                            item.lat ??
-                            item.center?.lat ??
-                            null;
+                        .map(item => {
 
-                        const itemLon =
-                            item.lon ??
-                            item.center?.lon ??
-                            null;
+                            const tags =
+                                item.tags || {};
 
-                        return new Lead({
+                            const itemLat =
+                                item.lat ??
+                                item.center?.lat ??
+                                null;
 
-                            nombre:
-                                tags.name,
+                            const itemLon =
+                                item.lon ??
+                                item.center?.lon ??
+                                null;
 
-                            provincia:
-                                filters.provincia !== 'todas'
-                                    ? filters.provincia
-                                    : 'Buenos Aires',
-
-                            ciudad:
-                                tags['addr:city'] ||
-                                ciudad,
-
-                            rubro:
-                                filters.rubro,
-
-                            telefono:
+                            const phone =
                                 tags.phone ||
                                 tags['contact:phone'] ||
                                 tags['contact:mobile'] ||
-                                null,
+                                null;
 
-                            email:
+                            const email =
                                 tags.email ||
                                 tags['contact:email'] ||
-                                null,
+                                null;
 
-                            website:
+                            const website =
                                 tags.website ||
                                 tags['contact:website'] ||
-                                null,
+                                null;
 
-                            redes: {
-                                facebook:
-                                    tags.facebook ||
-                                    tags['contact:facebook'] ||
-                                    null,
+                            return new Lead({
 
-                                instagram:
-                                    tags.instagram ||
-                                    tags['contact:instagram'] ||
-                                    null
-                            },
+                                nombre:
+                                    tags.name,
 
-                            fuentes: [
-                                this.name
-                            ],
+                                provincia:
+                                    tags['addr:state'] ||
+                                    getProvinceName(
+                                        filters.provincia
+                                    ),
 
-                            coordenadas: {
-                                lat: itemLat,
-                                lng: itemLon
-                            }
+                                ciudad:
+                                    tags['addr:city'] ||
+                                    tags['addr:town'] ||
+                                    tags['addr:municipality'] ||
+                                    tags['addr:suburb'] ||
+                                    ciudad,
+
+                                rubro:
+                                    rubroOriginal,
+
+                                telefono:
+                                    phone,
+
+                                email:
+                                    email,
+
+                                website:
+                                    website,
+
+                                redes: {
+
+                                    facebook:
+                                        tags.facebook ||
+                                        tags['contact:facebook'] ||
+                                        null,
+
+                                    instagram:
+                                        tags.instagram ||
+                                        tags['contact:instagram'] ||
+                                        null
+                                },
+
+                                fuentes: [
+                                    this.name
+                                ],
+
+                                coordenadas: {
+
+                                    lat:
+                                        itemLat,
+
+                                    lng:
+                                        itemLon
+                                }
+                            });
                         });
-                    });
 
                 console.log(
                     `[OverpassProvider] ${leads.length} resultados reales encontrados`
                 );
 
+                /*
+                 * =================================================
+                 * 7. INFORMACIÓN ÚTIL PARA DEBUG
+                 * =================================================
+                 */
+
+                if (leads.length === 0) {
+
+                    console.warn(
+                        `[OverpassProvider] El servidor respondió correctamente pero no encontró ${rubroOriginal} en ${ciudad}`
+                    );
+                }
+
+                /*
+                 * Servidor exitoso.
+                 */
                 return leads;
 
             } catch (error) {
@@ -454,11 +571,22 @@ out center tags;
                     error
                 );
 
+                /*
+                 * No hacemos throw.
+                 *
+                 * Probamos el siguiente servidor.
+                 */
             }
         }
 
+        /*
+         * ========================================================
+         * 8. TODOS LOS SERVIDORES FALLARON
+         * ========================================================
+         */
+
         console.error(
-            '[OverpassProvider] Todos los servidores fallaron.'
+            '[OverpassProvider] Todos los servidores Overpass fallaron.'
         );
 
         return [];
