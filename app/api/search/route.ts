@@ -1,78 +1,177 @@
 import { NextRequest, NextResponse } from "next/server";
 
-// Importación de las clases del Pipeline
 import { SearchService } from "@/js/services/SearchService";
 import { DeduplicatorService } from "@/js/services/DeduplicatorService";
 import { ScoringService } from "@/js/services/ScoringService";
+import { LeadEnricherService } from "@/js/services/LeadEnricherService";
 
-// Importación de los Proveedores
 import { OverpassProvider } from "@/js/providers/OverpassProvider";
 import { DuckDuckGoProvider } from "@/js/providers/DuckDuckGoProvider";
 
 export async function GET(request: NextRequest) {
-  const { searchParams } = new URL(request.url);
+    const { searchParams } = new URL(request.url);
 
-  const rubro = searchParams.get("rubro");
-  const ciudad = searchParams.get("ciudad");
-  const provincia = searchParams.get("provincia") || "todas";
-  const tamano = searchParams.get("tamano") || "todos";
-  const necesidad = searchParams.get("necesidad") || "cualquiera";
+    const rubro = searchParams.get("rubro");
+    const ciudad = searchParams.get("ciudad");
+    const provincia =
+        searchParams.get("provincia") || "todas";
 
-  if (!rubro || !ciudad) {
-    return NextResponse.json(
-      {
-        success: false,
-        error: "Debe indicar rubro y ciudad."
-      },
-      {
-        status: 400
-      }
-    );
-  }
+    const tamano =
+        searchParams.get("tamano") || "todos";
 
-  try {
-    // 1. Inicializar el Orquestador y registrar proveedores
-    const searchService = new SearchService();
-    searchService.registerProvider(new OverpassProvider());
-    searchService.registerProvider(new DuckDuckGoProvider());
+    const necesidad =
+        searchParams.get("necesidad") || "cualquiera";
 
-    // 2. Empaquetar filtros
-    const filters = {
-      rubro,
-      ciudad,
-      provincia,
-      tamano,
-      necesidad
-    };
+    if (!rubro || !ciudad) {
+        return NextResponse.json(
+            {
+                success: false,
+                error: "Debe indicar rubro y ciudad."
+            },
+            {
+                status: 400
+            }
+        );
+    }
 
-    // 3. Ejecutar Pipeline en 3 Fases:
-    // Fase A: Búsqueda paralela multiproveedor
-    const rawLeads = await searchService.searchAll(filters);
+    try {
 
-    // Fase B: Deduplicación y fusión de datos
-    const deduplicatedLeads = DeduplicatorService.process(rawLeads);
+        /*
+         * ========================================
+         * FASE 1
+         * BÚSQUEDA MULTIPROVEEDOR
+         * ========================================
+         */
 
-    // Fase C: Evaluación e Scoring con IA / Reglas
-    const finalLeads = ScoringService.process(deduplicatedLeads);
+        const searchService =
+            new SearchService();
 
-    // 4. Retornar respuesta estructurada
-    return NextResponse.json({
-      success: true,
-      count: finalLeads.length,
-      results: finalLeads
-    });
+        searchService.registerProvider(
+            new OverpassProvider()
+        );
 
-  } catch (error) {
-    console.error("[API Search Error]:", error);
+        searchService.registerProvider(
+            new DuckDuckGoProvider()
+        );
 
-    return NextResponse.json(
-      {
-        success: false,
-        error: "Error interno del servidor al procesar la búsqueda."
-      },
-      {
-        status: 500
-      }
-    );
-  }
+        const filters = {
+            rubro,
+            ciudad,
+            provincia,
+            tamano,
+            necesidad
+        };
+
+        const rawLeads =
+            await searchService.searchAll(
+                filters
+            );
+
+        console.log(
+            `[API Search] Leads en bruto: ${rawLeads.length}`
+        );
+
+        /*
+         * ========================================
+         * FASE 2
+         * DEDUPLICACIÓN
+         * ========================================
+         */
+
+        const deduplicatedLeads =
+            DeduplicatorService.process(
+                rawLeads
+            );
+
+        console.log(
+            `[API Search] Leads después de deduplicar: ${deduplicatedLeads.length}`
+        );
+
+        /*
+         * ========================================
+         * FASE 3
+         * ENRIQUECIMIENTO WEB
+         * ========================================
+         *
+         * Visitamos los sitios encontrados
+         * para intentar obtener:
+         *
+         * - teléfono
+         * - email
+         * - WhatsApp
+         * - Facebook
+         * - Instagram
+         * - LinkedIn
+         */
+
+        const enrichedLeads =
+            await LeadEnricherService.process(
+                deduplicatedLeads
+            );
+
+        console.log(
+            `[API Search] Leads enriquecidos: ${enrichedLeads.length}`
+        );
+
+        /*
+         * ========================================
+         * FASE 4
+         * SCORING
+         * ========================================
+         *
+         * IMPORTANTE:
+         * El scoring ocurre DESPUÉS del
+         * enriquecimiento.
+         */
+
+        const finalLeads =
+            ScoringService.process(
+                enrichedLeads
+            );
+
+        /*
+         * ========================================
+         * RESPUESTA
+         * ========================================
+         */
+
+        return NextResponse.json({
+            success: true,
+
+            count: finalLeads.length,
+
+            results: finalLeads,
+
+            meta: {
+                raw: rawLeads.length,
+
+                deduplicated:
+                    deduplicatedLeads.length,
+
+                enriched:
+                    enrichedLeads.length,
+
+                scored:
+                    finalLeads.length
+            }
+        });
+
+    } catch (error) {
+
+        console.error(
+            "[API Search Error]:",
+            error
+        );
+
+        return NextResponse.json(
+            {
+                success: false,
+                error:
+                    "Error interno del servidor al procesar la búsqueda."
+            },
+            {
+                status: 500
+            }
+        );
+    }
 }
