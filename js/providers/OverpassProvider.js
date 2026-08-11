@@ -3,162 +3,56 @@
 import { SearchProvider } from './SearchProvider.js';
 import { Lead } from '../models/Lead.js';
 
-/*
- * ============================================================
- * SERVIDORES OVERPASS
- * ============================================================
- *
- * Si uno está saturado o devuelve 504,
- * probamos automáticamente el siguiente.
- */
 const OVERPASS_ENDPOINTS = [
     'https://overpass-api.de/api/interpreter',
     'https://overpass.kumi.systems/api/interpreter',
-    'https://overpass.private.coffee/api/interpreter'
+    'https://overpass.private.coffee/api/interpreter',
 ];
 
-/*
- * ============================================================
- * CATEGORÍAS OSM
- * ============================================================
- */
 const CATEGORY_MAP = {
-    farmacia: {
-        amenity: 'pharmacy'
-    },
+    farmacia: { amenity: 'pharmacy' },
+    farmacias: { amenity: 'pharmacy' },
 
-    farmacias: {
-        amenity: 'pharmacy'
-    },
+    ferreteria: { shop: 'hardware' },
+    'ferretería': { shop: 'hardware' },
 
-    ferreteria: {
-        shop: 'hardware'
-    },
+    gomeria: { shop: 'tyres' },
+    'gomería': { shop: 'tyres' },
 
-    gomeria: {
-        shop: 'tyres'
-    },
+    neumaticos: { shop: 'tyres' },
+    'neumáticos': { shop: 'tyres' },
 
-    neumaticos: {
-        shop: 'tyres'
-    },
+    supermercado: { shop: 'supermarket' },
+    supermercados: { shop: 'supermarket' },
 
-    supermercado: {
-        shop: 'supermarket'
-    },
+    panaderia: { shop: 'bakery' },
+    'panadería': { shop: 'bakery' },
 
-    supermercados: {
-        shop: 'supermarket'
-    },
+    libreria: { shop: 'books' },
+    'librería': { shop: 'books' },
 
-    panaderia: {
-        shop: 'bakery'
-    },
+    kiosco: { shop: 'convenience' },
 
-    libreria: {
-        shop: 'books'
-    },
+    peluqueria: { shop: 'hairdresser' },
+    'peluquería': { shop: 'hairdresser' },
 
-    kiosco: {
-        shop: 'convenience'
-    },
+    restaurante: { amenity: 'restaurant' },
+    restaurant: { amenity: 'restaurant' },
 
-    peluqueria: {
-        shop: 'hairdresser'
-    },
+    bar: { amenity: 'bar' },
 
-    restaurante: {
-        amenity: 'restaurant'
-    },
+    cafe: { amenity: 'cafe' },
+    'café': { amenity: 'cafe' },
 
-    restaurant: {
-        amenity: 'restaurant'
-    },
+    veterinaria: { amenity: 'veterinary' },
+    veterinario: { amenity: 'veterinary' },
 
-    bar: {
-        amenity: 'bar'
-    },
-
-    cafe: {
-        amenity: 'cafe'
-    },
-
-    veterinaria: {
-        amenity: 'veterinary'
-    },
-
-    veterinario: {
-        amenity: 'veterinary'
-    },
-
-    hotel: {
-        tourism: 'hotel'
-    }
+    hotel: { tourism: 'hotel' }
 };
 
-/*
- * ============================================================
- * NORMALIZACIÓN DE TEXTO
- * ============================================================
- *
- * Permite que:
- *
- * farmacia
- * Farmacia
- * FARMACIA
- *
- * sean tratados igual.
- *
- * También elimina acentos.
- */
-function normalizeText(value) {
+const GEOCODER_TIMEOUT = 8000;
+const OVERPASS_TIMEOUT = 9000;
 
-    return String(value || '')
-        .trim()
-        .toLowerCase()
-        .normalize('NFD')
-        .replace(/[\u0300-\u036f]/g, '');
-}
-
-/*
- * ============================================================
- * NOMBRE DE PROVINCIA
- * ============================================================
- */
-function getProvinceName(provincia) {
-    const map = {
-        bsas: 'Buenos Aires',
-        caba: 'Ciudad Autónoma de Buenos Aires',
-        cordoba: 'Córdoba',
-        'santa-fe': 'Santa Fe',
-        'entre-rios': 'Entre Ríos',
-        mendoza: 'Mendoza',
-        tucuman: 'Tucumán',
-        salta: 'Salta',
-        neuquen: 'Neuquén',
-        chubut: 'Chubut',
-        'rio-negro': 'Río Negro',
-        misiones: 'Misiones',
-        corrientes: 'Corrientes',
-        chaco: 'Chaco',
-        formosa: 'Formosa',
-        jujuy: 'Jujuy',
-        catamarca: 'Catamarca',
-        'la-rioja': 'La Rioja',
-        'san-juan': 'San Juan',
-        'san-luis': 'San Luis',
-        'santa-cruz': 'Santa Cruz',
-        'tierra-del-fuego': 'Tierra del Fuego'
-    };
-
-    return map[provincia] || provincia;
-}
-
-/*
- * ============================================================
- * PROVIDER
- * ============================================================
- */
 export class OverpassProvider extends SearchProvider {
 
     constructor() {
@@ -167,45 +61,53 @@ export class OverpassProvider extends SearchProvider {
 
     async search(filters) {
 
-        const rubroOriginal = String(
-            filters.rubro || ''
-        ).trim();
+        const rubro = String(filters.rubro || '')
+            .trim()
+            .toLowerCase();
 
-        const rubro = normalizeText(rubroOriginal);
-
-        const ciudad = String(
-            filters.ciudad || ''
-        ).trim();
+        const ciudad = String(filters.ciudad || '')
+            .trim();
 
         console.log(
-            `[OverpassProvider] Buscando "${rubroOriginal}" en "${ciudad}"`
+            `[OverpassProvider] Buscando "${rubro}" en "${ciudad}"`
         );
 
-        /*
-         * ========================================================
-         * 1. GEOCODIFICAR CIUDAD
-         * ========================================================
-         */
+        // ========================================
+        // 1. DETERMINAR CATEGORÍA
+        // ========================================
+
+        const category = CATEGORY_MAP[rubro];
+
+        if (!category) {
+
+            console.warn(
+                `[OverpassProvider] Rubro no mapeado: ${rubro}`
+            );
+
+            return [];
+        }
+
+        // ========================================
+        // 2. GEOCODIFICAR CIUDAD
+        // ========================================
 
         let lat;
         let lon;
 
         try {
 
-            const params = new URLSearchParams({
-                q: `${ciudad}, Argentina`,
-                format: 'json',
-                limit: '1',
-                countrycodes: 'ar',
-                addressdetails: '1'
-            });
-
-            const geoUrl =
-                `https://nominatim.openstreetmap.org/search?${params.toString()}`;
-
             console.log(
                 `[Nominatim] Buscando coordenadas para ${ciudad}`
             );
+
+            const geoUrl =
+                'https://nominatim.openstreetmap.org/search?' +
+                new URLSearchParams({
+                    q: `${ciudad}, Argentina`,
+                    format: 'json',
+                    limit: '1',
+                    countrycodes: 'ar'
+                });
 
             const geoResponse = await fetch(
                 geoUrl,
@@ -214,19 +116,20 @@ export class OverpassProvider extends SearchProvider {
                         'User-Agent':
                             'LeadHunterArgentina/1.0'
                     },
-
                     cache: 'no-store',
-
-                    signal:
-                        AbortSignal.timeout(10000)
+                    signal: AbortSignal.timeout(
+                        GEOCODER_TIMEOUT
+                    )
                 }
             );
 
             if (!geoResponse.ok) {
 
-                throw new Error(
-                    `Nominatim HTTP ${geoResponse.status}`
+                console.warn(
+                    `[Nominatim] HTTP ${geoResponse.status}`
                 );
+
+                return [];
             }
 
             const geoData =
@@ -244,13 +147,8 @@ export class OverpassProvider extends SearchProvider {
                 return [];
             }
 
-            lat = Number(
-                geoData[0].lat
-            );
-
-            lon = Number(
-                geoData[0].lon
-            );
+            lat = Number(geoData[0].lat);
+            lon = Number(geoData[0].lon);
 
             console.log(
                 `[Nominatim] ${ciudad}: ${lat}, ${lon}`
@@ -258,90 +156,55 @@ export class OverpassProvider extends SearchProvider {
 
         } catch (error) {
 
-            console.error(
-                '[OverpassProvider] Error Nominatim:',
+            console.warn(
+                '[Nominatim] Error:',
                 error
             );
 
             return [];
         }
 
-        /*
-         * ========================================================
-         * 2. BUSCAR CATEGORÍA OSM
-         * ========================================================
-         */
-
-        const category =
-            CATEGORY_MAP[rubro];
-
-        if (!category) {
-
-            console.warn(
-                `[OverpassProvider] Rubro no mapeado: "${rubroOriginal}"`
-            );
-
-            return [];
-        }
-
-        /*
-         * ========================================================
-         * 3. RADIO DE BÚSQUEDA
-         * ========================================================
-         *
-         * 10 km inicialmente.
-         *
-         * Es bastante más liviano que los 15 km anteriores.
-         */
-
-        const radius = 10000;
-
-        /*
-         * ========================================================
-         * 4. CONSTRUIR QUERY
-         * ========================================================
-         *
-         * Eliminamos RELATION porque genera bastante carga
-         * y para negocios normalmente node + way es suficiente.
-         */
+        // ========================================
+        // 3. CONSTRUIR CONSULTA
+        // ========================================
 
         const queryParts = [];
 
         if (category.shop) {
 
             queryParts.push(
-                `node["shop"="${category.shop}"](around:${radius},${lat},${lon});`
+                `node["shop"="${category.shop}"](around:10000,${lat},${lon});`
             );
 
             queryParts.push(
-                `way["shop"="${category.shop}"](around:${radius},${lat},${lon});`
+                `way["shop"="${category.shop}"](around:10000,${lat},${lon});`
             );
         }
 
         if (category.amenity) {
 
             queryParts.push(
-                `node["amenity"="${category.amenity}"](around:${radius},${lat},${lon});`
+                `node["amenity"="${category.amenity}"](around:10000,${lat},${lon});`
             );
 
             queryParts.push(
-                `way["amenity"="${category.amenity}"](around:${radius},${lat},${lon});`
+                `way["amenity"="${category.amenity}"](around:10000,${lat},${lon});`
             );
         }
 
         if (category.tourism) {
 
             queryParts.push(
-                `node["tourism"="${category.tourism}"](around:${radius},${lat},${lon});`
+                `node["tourism"="${category.tourism}"](around:10000,${lat},${lon});`
             );
 
             queryParts.push(
-                `way["tourism"="${category.tourism}"](around:${radius},${lat},${lon});`
+                `way["tourism"="${category.tourism}"](around:10000,${lat},${lon});`
             );
         }
 
         const query = `
-[out:json][timeout:15];
+[out:json][timeout:10];
 
 (
     ${queryParts.join('\n    ')}
@@ -360,11 +223,9 @@ out center tags;
             '====================================='
         );
 
-        /*
-         * ========================================================
-         * 5. PROBAR SERVIDORES
-         * ========================================================
-         */
+        // ========================================
+        // 4. PROBAR SERVIDORES
+        // ========================================
 
         for (
             let index = 0;
@@ -403,21 +264,16 @@ out center tags;
                                 encodeURIComponent(query),
 
                             signal:
-                                AbortSignal.timeout(20000)
+                                AbortSignal.timeout(
+                                    OVERPASS_TIMEOUT
+                                )
                         }
                     );
-
-                /*
-                 * ------------------------------------------------
-                 * Si devuelve 429 / 502 / 503 / 504,
-                 * probamos automáticamente otro servidor.
-                 * ------------------------------------------------
-                 */
 
                 if (!response.ok) {
 
                     console.warn(
-                        `[OverpassProvider] ${endpoint} respondió HTTP ${response.status}`
+                        `[OverpassProvider] HTTP ${response.status}`
                     );
 
                     continue;
@@ -432,31 +288,27 @@ out center tags;
                 ) {
 
                     console.warn(
-                        `[OverpassProvider] Respuesta inválida de ${endpoint}`
+                        '[OverpassProvider] Respuesta inválida'
                     );
 
                     continue;
                 }
 
-                /*
-                 * =================================================
-                 * 6. CONVERTIR OSM -> LEAD
-                 * =================================================
-                 */
+                // ========================================
+                // 5. CONVERTIR RESULTADOS
+                // ========================================
 
                 const leads =
                     data.elements
-
                         .filter(
                             item =>
                                 item.tags &&
                                 item.tags.name
                         )
-
                         .map(item => {
 
                             const tags =
-                                item.tags || {};
+                                item.tags;
 
                             const itemLat =
                                 item.lat ??
@@ -468,51 +320,38 @@ out center tags;
                                 item.center?.lon ??
                                 null;
 
-                            const phone =
-                                tags.phone ||
-                                tags['contact:phone'] ||
-                                tags['contact:mobile'] ||
-                                null;
-
-                            const email =
-                                tags.email ||
-                                tags['contact:email'] ||
-                                null;
-
-                            const website =
-                                tags.website ||
-                                tags['contact:website'] ||
-                                null;
-
                             return new Lead({
 
                                 nombre:
                                     tags.name,
 
                                 provincia:
-                                    tags['addr:state'] ||
-                                    getProvinceName(
-                                        filters.provincia
-                                    ),
+                                    filters.provincia !== 'todas'
+                                        ? filters.provincia
+                                        : 'Buenos Aires',
 
                                 ciudad:
                                     tags['addr:city'] ||
-                                    tags['addr:town'] ||
-                                    tags['addr:municipality'] ||
-                                    tags['addr:suburb'] ||
                                     ciudad,
 
                                 rubro:
-                                    rubroOriginal,
+                                    filters.rubro,
 
                                 telefono:
-                                    phone,
+                                    tags.phone ||
+                                    tags['contact:phone'] ||
+                                    tags['contact:mobile'] ||
+                                    null,
 
                                 email:
-                                    email,
+                                    tags.email ||
+                                    tags['contact:email'] ||
+                                    null,
 
                                 website:
-                                    website,
+                                    tags.website ||
+                                    tags['contact:website'] ||
+                                    null,
 
                                 redes: {
 
@@ -532,12 +371,8 @@ out center tags;
                                 ],
 
                                 coordenadas: {
-
-                                    lat:
-                                        itemLat,
-
-                                    lng:
-                                        itemLon
+                                    lat: itemLat,
+                                    lng: itemLon
                                 }
                             });
                         });
@@ -546,47 +381,20 @@ out center tags;
                     `[OverpassProvider] ${leads.length} resultados reales encontrados`
                 );
 
-                /*
-                 * =================================================
-                 * 7. INFORMACIÓN ÚTIL PARA DEBUG
-                 * =================================================
-                 */
-
-                if (leads.length === 0) {
-
-                    console.warn(
-                        `[OverpassProvider] El servidor respondió correctamente pero no encontró ${rubroOriginal} en ${ciudad}`
-                    );
-                }
-
-                /*
-                 * Servidor exitoso.
-                 */
                 return leads;
 
             } catch (error) {
 
                 console.warn(
-                    `[OverpassProvider] Falló ${endpoint}:`,
-                    error
+                    `[OverpassProvider] Servidor ${index + 1} no disponible`
                 );
 
-                /*
-                 * No hacemos throw.
-                 *
-                 * Probamos el siguiente servidor.
-                 */
+                continue;
             }
         }
 
-        /*
-         * ========================================================
-         * 8. TODOS LOS SERVIDORES FALLARON
-         * ========================================================
-         */
-
-        console.error(
-            '[OverpassProvider] Todos los servidores Overpass fallaron.'
+        console.warn(
+            '[OverpassProvider] Todos los servidores fallaron. Continuando con otros proveedores.'
         );
 
         return [];
