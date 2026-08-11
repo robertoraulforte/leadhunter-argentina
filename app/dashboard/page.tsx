@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, type FormEvent } from 'react';
 
 interface LeadResult {
   id: string;
@@ -19,16 +19,16 @@ export default function BuscadorLeads() {
   const [rubro, setRubro] = useState('');
   const [ciudad, setCiudad] = useState('');
   const [provincia, setProvincia] = useState('todas');
-  
+
   const [leads, setLeads] = useState<LeadResult[]>([]);
   const [loading, setLoading] = useState(false);
   const [searched, setSearched] = useState(false);
 
-  // ID del lead que se está guardando en el momento
   const [savingId, setSavingId] = useState<string | null>(null);
 
-  const handleSearch = async (e: React.FormEvent) => {
+  const handleSearch = async (e: FormEvent) => {
     e.preventDefault();
+
     if (!rubro || !ciudad) {
       alert('Por favor completa el rubro y la ciudad.');
       return;
@@ -41,6 +41,7 @@ export default function BuscadorLeads() {
       const res = await fetch(
         `/api/search?rubro=${encodeURIComponent(rubro)}&ciudad=${encodeURIComponent(ciudad)}&provincia=${encodeURIComponent(provincia)}`
       );
+
       const data = await res.json();
 
       if (data.success) {
@@ -57,7 +58,6 @@ export default function BuscadorLeads() {
     }
   };
 
-  // 🔹 NUEVA FUNCIÓN: Enviar lead a Prisma BD
   const handleSaveLead = async (lead: LeadResult) => {
     setSavingId(lead.id);
 
@@ -82,7 +82,7 @@ export default function BuscadorLeads() {
       if (data.success) {
         alert(`¡Lead "${lead.nombre}" guardado con éxito en el CRM!`);
       } else {
-        alert(`Error al guardar: ${data.error || 'Intente nuevamente'}`);
+        alert(`Error al guardar: ${data.error || 'Intenta nuevamente'}`);
       }
     } catch (err) {
       console.error('Error al guardar lead:', err);
@@ -94,14 +94,22 @@ export default function BuscadorLeads() {
 
   return (
     <div className="p-6 max-w-7xl mx-auto space-y-6">
-      {/* Formulario de Búsqueda */}
+
+      {/* Formulario de búsqueda */}
       <div className="bg-slate-900 border border-slate-800 rounded-xl p-6 shadow-md">
         <h2 className="text-xl font-bold text-white mb-4 flex items-center gap-2">
-          🔍 Buscar Empresas y Leads
+          🔎 Buscar Empresas y Leads
         </h2>
-        <form onSubmit={handleSearch} className="grid grid-cols-1 md:grid-cols-3 gap-4">
+
+        <form
+          onSubmit={handleSearch}
+          className="grid grid-cols-1 md:grid-cols-3 gap-4"
+        >
           <div>
-            <label className="block text-sm font-medium text-slate-300 mb-1">Rubro</label>
+            <label className="block text-sm font-medium text-slate-300 mb-1">
+              Rubro
+            </label>
+
             <input
               type="text"
               placeholder="Ej: gomería, clínica, ferretería"
@@ -112,7 +120,10 @@ export default function BuscadorLeads() {
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-slate-300 mb-1">Ciudad</label>
+            <label className="block text-sm font-medium text-slate-300 mb-1">
+              Ciudad
+            </label>
+
             <input
               type="text"
               placeholder="Ej: Balcarce, Mar del Plata, Córdoba"
@@ -123,7 +134,10 @@ export default function BuscadorLeads() {
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-slate-300 mb-1">Provincia</label>
+            <label className="block text-sm font-medium text-slate-300 mb-1">
+              Provincia
+            </label>
+
             <select
               value={provincia}
               onChange={(e) => setProvincia(e.target.value)}
@@ -149,7 +163,7 @@ export default function BuscadorLeads() {
         </form>
       </div>
 
-      {/* Grid de Resultados */}
+      {/* Resultados */}
       <div>
         <h3 className="text-lg font-semibold text-white mb-4">
           Resultados {searched && `(${leads.length} leads encontrados)`}
@@ -157,50 +171,81 @@ export default function BuscadorLeads() {
 
         {loading ? (
           <div className="text-center py-12 text-slate-400">
-            <p className="animate-pulse">Ejecutando motores de búsqueda en paralelo...</p>
+            <p className="animate-pulse">
+              Ejecutando motores de búsqueda en paralelo...
+            </p>
           </div>
         ) : leads.length > 0 ? (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+
             {leads.map((lead) => (
-              <div key={lead.id} className="bg-slate-900 border border-slate-800 rounded-xl p-5 flex flex-col justify-between hover:border-blue-500 transition">
+              <div
+                key={lead.id}
+                className="bg-slate-900 border border-slate-800 rounded-xl p-5 flex flex-col justify-between hover:border-blue-500 transition"
+              >
+
                 <div>
                   <div className="flex justify-between items-start mb-2">
-                    <h4 className="font-bold text-white text-lg">{lead.nombre}</h4>
-                    <span className={`text-xs font-semibold px-2.5 py-1 rounded-full border ${
-                      lead.scoreIA >= 80 
-                        ? 'bg-emerald-950 text-emerald-300 border-emerald-800' 
-                        : 'bg-amber-950 text-amber-300 border-amber-800'
-                    }`}>
+
+                    <h4 className="font-bold text-white text-lg">
+                      {lead.nombre}
+                    </h4>
+
+                    <span
+                      className={`text-xs font-semibold px-2.5 py-1 rounded-full border ${
+                        lead.scoreIA >= 80
+                          ? 'bg-emerald-950 text-emerald-300 border-emerald-800'
+                          : 'bg-amber-950 text-amber-300 border-amber-800'
+                      }`}
+                    >
                       Score: {lead.scoreIA}%
                     </span>
+
                   </div>
 
-                  <p className="text-sm text-slate-400 mb-1">📍 {lead.ciudad}, {lead.provincia}</p>
-                  <p className="text-sm text-slate-300 mb-1">✉️ {lead.email || 'No disponible'}</p>
-                  <p className="text-sm text-slate-300 mb-3">📞 {lead.telefono || 'No disponible'}</p>
+                  <p className="text-sm text-slate-400 mb-1">
+                    📍 {lead.ciudad}, {lead.provincia}
+                  </p>
+
+                  <p className="text-sm text-slate-300 mb-1">
+                    ✉️ {lead.email || 'No disponible'}
+                  </p>
+
+                  <p className="text-sm text-slate-300 mb-3">
+                    📞 {lead.telefono || 'No disponible'}
+                  </p>
 
                   <div className="mb-4">
-                    <span className="text-xs text-slate-500 block mb-1">Fuentes:</span>
+                    <span className="text-xs text-slate-500 block mb-1">
+                      Fuentes:
+                    </span>
+
                     <div className="flex flex-wrap gap-1">
-                      {lead.fuentes.map((f: string, i: number) => (
-                        <span key={i} className="text-xs bg-slate-800 text-slate-300 px-2 py-0.5 rounded border border-slate-700">
-                          {f}
+                      {lead.fuentes.map((fuente, index) => (
+                        <span
+                          key={index}
+                          className="text-xs bg-slate-800 text-slate-300 px-2 py-0.5 rounded border border-slate-700"
+                        >
+                          {fuente}
                         </span>
                       ))}
                     </div>
                   </div>
                 </div>
 
-                {/* 🔹 BOTÓN CONECTADO A PRISMA */}
-                <button 
+                <button
                   onClick={() => handleSaveLead(lead)}
                   disabled={savingId === lead.id}
                   className="w-full bg-slate-800 hover:bg-slate-700 disabled:opacity-50 text-blue-400 border border-slate-700 py-2 rounded-lg text-sm font-medium transition"
                 >
-                  {savingId === lead.id ? 'Guardando...' : 'Guardar en Favoritos / CRM'}
+                  {savingId === lead.id
+                    ? 'Guardando...'
+                    : 'Guardar en Favoritos / CRM'}
                 </button>
+
               </div>
             ))}
+
           </div>
         ) : searched ? (
           <div className="text-center py-12 bg-slate-900 border border-slate-800 rounded-xl text-slate-400">
