@@ -1,16 +1,28 @@
-import { PrismaClient } from "../app/generated/prisma/client";
+﻿import { PrismaClient } from "../app/generated/prisma/client";
+import { PrismaPg } from "@prisma/adapter-pg";
 
-// Tipamos la clase constructora y la instancia de forma segura sin usar 'any'
-type PrismaClientConstructor = new (options?: Record<string, unknown>) => InstanceType<typeof PrismaClient>;
+const connectionString = process.env.DATABASE_URL;
 
-const ClientClass = PrismaClient as unknown as PrismaClientConstructor;
+if (!connectionString) {
+    throw new Error(
+        "DATABASE_URL no está definida en las variables de entorno."
+    );
+}
+
+const adapter = new PrismaPg({
+    connectionString,
+});
 
 const globalForPrisma = globalThis as unknown as {
-  prisma: InstanceType<typeof PrismaClient> | undefined;
+    prisma: PrismaClient | undefined;
 };
 
-export const prisma = globalForPrisma.prisma ?? new ClientClass();
+export const prisma =
+    globalForPrisma.prisma ??
+    new PrismaClient({
+        adapter,
+    });
 
 if (process.env.NODE_ENV !== "production") {
-  globalForPrisma.prisma = prisma;
+    globalForPrisma.prisma = prisma;
 }

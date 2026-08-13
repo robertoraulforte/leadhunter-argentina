@@ -9,6 +9,8 @@ import { OverpassProvider } from "@/js/providers/OverpassProvider";
 import { DuckDuckGoProvider } from "@/js/providers/DuckDuckGoProvider";
 
 export async function GET(request: NextRequest) {
+    const totalStart = performance.now();
+
     const { searchParams } = new URL(request.url);
 
     const rubro = searchParams.get("rubro");
@@ -35,13 +37,14 @@ export async function GET(request: NextRequest) {
     }
 
     try {
-
         /*
          * ========================================
          * FASE 1
          * BÚSQUEDA MULTIPROVEEDOR
          * ========================================
          */
+
+        const searchStart = performance.now();
 
         const searchService =
             new SearchService();
@@ -67,6 +70,13 @@ export async function GET(request: NextRequest) {
                 filters
             );
 
+        const searchTime =
+            performance.now() - searchStart;
+
+        console.log(
+            `[API Search] SearchService: ${(searchTime / 1000).toFixed(2)}s`
+        );
+
         console.log(
             `[API Search] Leads en bruto: ${rawLeads.length}`
         );
@@ -78,10 +88,19 @@ export async function GET(request: NextRequest) {
          * ========================================
          */
 
+        const dedupStart = performance.now();
+
         const deduplicatedLeads =
             DeduplicatorService.process(
                 rawLeads
             );
+
+        const dedupTime =
+            performance.now() - dedupStart;
+
+        console.log(
+            `[API Search] Deduplicator: ${(dedupTime / 1000).toFixed(2)}s`
+        );
 
         console.log(
             `[API Search] Leads después de deduplicar: ${deduplicatedLeads.length}`
@@ -92,22 +111,22 @@ export async function GET(request: NextRequest) {
          * FASE 3
          * ENRIQUECIMIENTO WEB
          * ========================================
-         *
-         * Visitamos los sitios encontrados
-         * para intentar obtener:
-         *
-         * - teléfono
-         * - email
-         * - WhatsApp
-         * - Facebook
-         * - Instagram
-         * - LinkedIn
          */
+
+        const enrichmentStart =
+            performance.now();
 
         const enrichedLeads =
             await LeadEnricherService.process(
                 deduplicatedLeads
             );
+
+        const enrichmentTime =
+            performance.now() - enrichmentStart;
+
+        console.log(
+            `[API Search] Enrichment: ${(enrichmentTime / 1000).toFixed(2)}s`
+        );
 
         console.log(
             `[API Search] Leads enriquecidos: ${enrichedLeads.length}`
@@ -118,16 +137,39 @@ export async function GET(request: NextRequest) {
          * FASE 4
          * SCORING
          * ========================================
-         *
-         * IMPORTANTE:
-         * El scoring ocurre DESPUÉS del
-         * enriquecimiento.
          */
+
+        const scoringStart =
+            performance.now();
 
         const finalLeads =
             ScoringService.process(
                 enrichedLeads
             );
+
+        const scoringTime =
+            performance.now() - scoringStart;
+
+        console.log(
+            `[API Search] Scoring: ${(scoringTime / 1000).toFixed(2)}s`
+        );
+
+        /*
+         * ========================================
+         * TIEMPO TOTAL
+         * ========================================
+         */
+
+        const totalTime =
+            performance.now() - totalStart;
+
+        console.log(
+            `[API Search] TOTAL: ${(totalTime / 1000).toFixed(2)}s`
+        );
+
+        console.log(
+            `[API Search] ========================================`
+        );
 
         /*
          * ========================================
@@ -152,15 +194,39 @@ export async function GET(request: NextRequest) {
                     enrichedLeads.length,
 
                 scored:
-                    finalLeads.length
+                    finalLeads.length,
+
+                timing: {
+                    searchMs:
+                        Math.round(searchTime),
+
+                    deduplicatorMs:
+                        Math.round(dedupTime),
+
+                    enrichmentMs:
+                        Math.round(enrichmentTime),
+
+                    scoringMs:
+                        Math.round(scoringTime),
+
+                    totalMs:
+                        Math.round(totalTime)
+                }
             }
         });
 
     } catch (error) {
 
+        const totalTime =
+            performance.now() - totalStart;
+
         console.error(
             "[API Search Error]:",
             error
+        );
+
+        console.error(
+            `[API Search] Falló después de ${(totalTime / 1000).toFixed(2)}s`
         );
 
         return NextResponse.json(
