@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 type Lead = {
   id: string;
@@ -35,7 +35,7 @@ type ApiResponse = {
   error?: string;
 };
 
-type EditForm = {
+type LeadForm = {
   name: string;
   category: string;
   city: string;
@@ -46,10 +46,35 @@ type EditForm = {
   website: string;
   facebook: string;
   instagram: string;
+  latitude: string;
+  longitude: string;
   score: string;
   priority: string;
   source: string;
+  favorite: boolean;
+  contacted: boolean;
   notes: string;
+};
+
+const EMPTY_FORM: LeadForm = {
+  name: "",
+  category: "",
+  city: "",
+  province: "",
+  address: "",
+  phone: "",
+  email: "",
+  website: "",
+  facebook: "",
+  instagram: "",
+  latitude: "",
+  longitude: "",
+  score: "",
+  priority: "",
+  source: "",
+  favorite: false,
+  contacted: false,
+  notes: "",
 };
 
 export default function CRMPage() {
@@ -63,26 +88,12 @@ export default function CRMPage() {
   const [statusFilter, setStatusFilter] = useState("TODOS");
 
   const [selectedLead, setSelectedLead] = useState<Lead | null>(null);
-  const [editingLead, setEditingLead] = useState<Lead | null>(null);
+  const [editing, setEditing] = useState(false);
+  const [form, setForm] = useState<LeadForm>(EMPTY_FORM);
 
-  const [editForm, setEditForm] = useState<EditForm>({
-    name: "",
-    category: "",
-    city: "",
-    province: "",
-    address: "",
-    phone: "",
-    email: "",
-    website: "",
-    facebook: "",
-    instagram: "",
-    score: "",
-    priority: "",
-    source: "",
-    notes: "",
-  });
+  const [darkMode, setDarkMode] = useState(false);
 
-  async function loadLeads() {
+  const loadLeads = useCallback(async () => {
     try {
       setLoading(true);
       setError("");
@@ -116,77 +127,44 @@ export default function CRMPage() {
     } finally {
       setLoading(false);
     }
-  }
+  }, []);
 
+  /*
+   * Carga inicial.
+   *
+   * El setState ocurre dentro de callbacks asincrónicos de fetch,
+   * no directamente en el cuerpo del efecto.
+   */
   useEffect(() => {
-    const controller = new AbortController();
-
-    async function fetchInitialLeads() {
-      try {
-        const response = await fetch("/api/crm/leads", {
-          method: "GET",
-          cache: "no-store",
-          signal: controller.signal,
-        });
-
-        if (!response.ok) {
-          throw new Error(`Error HTTP ${response.status}`);
-        }
-
-        const data: ApiResponse = await response.json();
-
-        if (!data.success) {
-          throw new Error(
-            data.error || "No se pudieron cargar los leads."
-          );
-        }
-
-        setLeads(data.results || []);
-        setError("");
-      } catch (err) {
-        if (
-          err instanceof DOMException &&
-          err.name === "AbortError"
-        ) {
-          return;
-        }
-
-        console.error("[CRM] Error cargando leads:", err);
-
-        setError(
-          err instanceof Error
-            ? err.message
-            : "No se pudieron cargar los leads."
-        );
-      } finally {
-        if (!controller.signal.aborted) {
-          setLoading(false);
-        }
-      }
-    }
-
-    fetchInitialLeads();
+    const timer = window.setTimeout(() => {
+      void loadLeads();
+    }, 0);
 
     return () => {
-      controller.abort();
+      window.clearTimeout(timer);
     };
-  }, []);
+  }, [loadLeads]);
 
   const filteredLeads = useMemo(() => {
     const normalizedSearch = search.trim().toLowerCase();
 
     return leads.filter((lead) => {
+      const searchableValues = [
+        lead.name,
+        lead.category,
+        lead.city,
+        lead.province,
+        lead.phone,
+        lead.email,
+        lead.website,
+        lead.facebook,
+        lead.instagram,
+        lead.source,
+      ];
+
       const matchesSearch =
         !normalizedSearch ||
-        [
-          lead.name,
-          lead.category,
-          lead.city,
-          lead.province,
-          lead.phone,
-          lead.email,
-          lead.website,
-        ]
+        searchableValues
           .filter(Boolean)
           .some((value) =>
             String(value)
@@ -227,166 +205,40 @@ export default function CRMPage() {
     };
   }, [leads]);
 
-  function openLead(lead: Lead) {
-    setSelectedLead(lead);
-    setEditingLead(null);
+  function priorityClass(priority: string | null) {
+    switch ((priority || "").toUpperCase()) {
+      case "ALTA":
+        return darkMode
+          ? "bg-red-950 text-red-300"
+          : "bg-red-100 text-red-700";
+
+      case "MEDIA":
+        return darkMode
+          ? "bg-yellow-950 text-yellow-300"
+          : "bg-yellow-100 text-yellow-700";
+
+      case "BAJA":
+        return darkMode
+          ? "bg-green-950 text-green-300"
+          : "bg-green-100 text-green-700";
+
+      default:
+        return darkMode
+          ? "bg-gray-700 text-gray-300"
+          : "bg-gray-100 text-gray-600";
+    }
   }
 
-  function closeLead() {
-    if (saving) {
-      return;
+  function formatDate(date: string) {
+    if (!date) {
+      return "-";
     }
 
-    setSelectedLead(null);
-    setEditingLead(null);
-  }
-
-  function startEditing(lead: Lead) {
-    setSelectedLead(null);
-    setEditingLead(lead);
-
-    setEditForm({
-      name: lead.name || "",
-      category: lead.category || "",
-      city: lead.city || "",
-      province: lead.province || "",
-      address: lead.address || "",
-      phone: lead.phone || "",
-      email: lead.email || "",
-      website: lead.website || "",
-      facebook: lead.facebook || "",
-      instagram: lead.instagram || "",
-      score:
-        lead.score !== null && lead.score !== undefined
-          ? String(lead.score)
-          : "",
-      priority: lead.priority || "",
-      source: lead.source || "",
-      notes: lead.notes || "",
+    return new Date(date).toLocaleDateString("es-AR", {
+      day: "2-digit",
+      month: "2-digit",
+      year: "numeric",
     });
-
-    setError("");
-  }
-
-  function cancelEditing() {
-    if (saving) {
-      return;
-    }
-
-    setEditingLead(null);
-  }
-
-  function updateForm(
-    field: keyof EditForm,
-    value: string
-  ) {
-    setEditForm((current) => ({
-      ...current,
-      [field]: value,
-    }));
-  }
-
-  async function saveLead() {
-    if (!editingLead) {
-      return;
-    }
-
-    if (!editForm.name.trim()) {
-      setError("El nombre del lead es obligatorio.");
-      return;
-    }
-
-    try {
-      setSaving(true);
-      setError("");
-
-      const scoreValue =
-        editForm.score.trim() === ""
-          ? null
-          : Number(editForm.score);
-
-      if (
-        scoreValue !== null &&
-        (Number.isNaN(scoreValue) ||
-          scoreValue < 0 ||
-          scoreValue > 100)
-      ) {
-        throw new Error(
-          "El score debe ser un número entre 0 y 100."
-        );
-      }
-
-      const response = await fetch("/api/crm/leads", {
-        method: "PATCH",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          id: editingLead.id,
-
-          name: editForm.name.trim(),
-          category: editForm.category.trim() || null,
-          city: editForm.city.trim() || null,
-          province: editForm.province.trim() || null,
-          address: editForm.address.trim() || null,
-          phone: editForm.phone.trim() || null,
-          email: editForm.email.trim() || null,
-          website: editForm.website.trim() || null,
-          facebook: editForm.facebook.trim() || null,
-          instagram: editForm.instagram.trim() || null,
-
-          score: scoreValue,
-
-          priority:
-            editForm.priority.trim() || null,
-
-          source:
-            editForm.source.trim() || null,
-
-          notes:
-            editForm.notes.trim() || null,
-        }),
-      });
-
-      const data: ApiResponse = await response.json();
-
-      if (
-        !response.ok ||
-        !data.success ||
-        !data.result
-      ) {
-        throw new Error(
-          data.error ||
-            "No se pudo actualizar el lead."
-        );
-      }
-
-      const updatedLead = data.result;
-
-      setLeads((current) =>
-        current.map((lead) =>
-          lead.id === updatedLead.id
-            ? updatedLead
-            : lead
-        )
-      );
-
-      setEditingLead(null);
-      setSelectedLead(updatedLead);
-    } catch (err) {
-      console.error(
-        "[CRM] Error actualizando lead:",
-        err
-      );
-
-      setError(
-        err instanceof Error
-          ? err.message
-          : "No se pudo actualizar el lead."
-      );
-    } finally {
-      setSaving(false);
-    }
   }
 
   async function updateLead(
@@ -410,14 +262,9 @@ export default function CRMPage() {
 
       const data: ApiResponse = await response.json();
 
-      if (
-        !response.ok ||
-        !data.success ||
-        !data.result
-      ) {
+      if (!response.ok || !data.success || !data.result) {
         throw new Error(
-          data.error ||
-            "No se pudo actualizar el lead."
+          data.error || "No se pudo actualizar el lead."
         );
       }
 
@@ -436,19 +283,165 @@ export default function CRMPage() {
           ? updatedLead
           : current
       );
+
+      return updatedLead;
     } catch (err) {
-      console.error(
-        "[CRM] Error actualizando lead:",
-        err
-      );
+      console.error("[CRM] Error actualizando lead:", err);
 
       setError(
         err instanceof Error
           ? err.message
           : "No se pudo actualizar el lead."
       );
+
+      return null;
     } finally {
       setSaving(false);
+    }
+  }
+
+  function openLead(lead: Lead) {
+    setSelectedLead(lead);
+    setEditing(false);
+
+    setForm({
+      name: lead.name || "",
+      category: lead.category || "",
+      city: lead.city || "",
+      province: lead.province || "",
+      address: lead.address || "",
+      phone: lead.phone || "",
+      email: lead.email || "",
+      website: lead.website || "",
+      facebook: lead.facebook || "",
+      instagram: lead.instagram || "",
+      latitude:
+        lead.latitude !== null
+          ? String(lead.latitude)
+          : "",
+      longitude:
+        lead.longitude !== null
+          ? String(lead.longitude)
+          : "",
+      score:
+        lead.score !== null
+          ? String(lead.score)
+          : "",
+      priority: lead.priority || "",
+      source: lead.source || "",
+      favorite: lead.favorite,
+      contacted: lead.contacted,
+      notes: lead.notes || "",
+    });
+  }
+
+  function closeLead() {
+    setSelectedLead(null);
+    setEditing(false);
+    setForm(EMPTY_FORM);
+  }
+
+  function updateForm<K extends keyof LeadForm>(
+    field: K,
+    value: LeadForm[K]
+  ) {
+    setForm((current) => ({
+      ...current,
+      [field]: value,
+    }));
+  }
+
+  async function saveEditedLead() {
+    if (!selectedLead) {
+      return;
+    }
+
+    if (!form.name.trim()) {
+      setError("El nombre del lead es obligatorio.");
+      return;
+    }
+
+    const scoreValue =
+      form.score.trim() === ""
+        ? null
+        : Number(form.score);
+
+    if (
+      scoreValue !== null &&
+      (Number.isNaN(scoreValue) ||
+        scoreValue < 0 ||
+        scoreValue > 100)
+    ) {
+      setError("El score debe estar entre 0 y 100.");
+      return;
+    }
+
+    const latitudeValue =
+      form.latitude.trim() === ""
+        ? null
+        : Number(form.latitude);
+
+    const longitudeValue =
+      form.longitude.trim() === ""
+        ? null
+        : Number(form.longitude);
+
+    const updated = await updateLead(
+      selectedLead.id,
+      {
+        name: form.name.trim(),
+        category: form.category.trim() || null,
+        city: form.city.trim() || null,
+        province: form.province.trim() || null,
+        address: form.address.trim() || null,
+        phone: form.phone.trim() || null,
+        email: form.email.trim() || null,
+        website: form.website.trim() || null,
+        facebook: form.facebook.trim() || null,
+        instagram: form.instagram.trim() || null,
+        latitude: latitudeValue,
+        longitude: longitudeValue,
+        score: scoreValue,
+        priority: form.priority || null,
+        source: form.source.trim() || null,
+        favorite: form.favorite,
+        contacted: form.contacted,
+        notes: form.notes.trim() || null,
+      }
+    );
+
+    if (updated) {
+      setEditing(false);
+
+      setForm({
+        name: updated.name || "",
+        category: updated.category || "",
+        city: updated.city || "",
+        province: updated.province || "",
+        address: updated.address || "",
+        phone: updated.phone || "",
+        email: updated.email || "",
+        website: updated.website || "",
+        facebook: updated.facebook || "",
+        instagram: updated.instagram || "",
+        latitude:
+          updated.latitude !== null
+            ? String(updated.latitude)
+            : "",
+        longitude:
+          updated.longitude !== null
+            ? String(updated.longitude)
+            : "",
+        score:
+          updated.score !== null
+            ? String(updated.score)
+            : "",
+        priority: updated.priority || "",
+        source: updated.source || "",
+        favorite: updated.favorite,
+        contacted: updated.contacted,
+        notes: updated.notes || "",
+      });
     }
   }
 
@@ -477,26 +470,21 @@ export default function CRMPage() {
       setSaving(true);
       setError("");
 
-      const response = await fetch(
-        "/api/crm/leads",
-        {
-          method: "DELETE",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            id: lead.id,
-          }),
-        }
-      );
+      const response = await fetch("/api/crm/leads", {
+        method: "DELETE",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          id: lead.id,
+        }),
+      });
 
-      const data: ApiResponse =
-        await response.json();
+      const data: ApiResponse = await response.json();
 
       if (!response.ok || !data.success) {
         throw new Error(
-          data.error ||
-            "No se pudo eliminar el lead."
+          data.error || "No se pudo eliminar el lead."
         );
       }
 
@@ -506,22 +494,11 @@ export default function CRMPage() {
         )
       );
 
-      setSelectedLead((current) =>
-        current?.id === lead.id
-          ? null
-          : current
-      );
-
-      setEditingLead((current) =>
-        current?.id === lead.id
-          ? null
-          : current
-      );
+      if (selectedLead?.id === lead.id) {
+        closeLead();
+      }
     } catch (err) {
-      console.error(
-        "[CRM] Error eliminando lead:",
-        err
-      );
+      console.error("[CRM] Error eliminando lead:", err);
 
       setError(
         err instanceof Error
@@ -533,72 +510,94 @@ export default function CRMPage() {
     }
   }
 
-  function priorityClass(
-    priority: string | null
-  ) {
-    switch (
-      (priority || "").toUpperCase()
-    ) {
-      case "ALTA":
-        return "bg-red-100 text-red-700";
+  const pageClasses = darkMode
+    ? "min-h-screen bg-gray-950 text-gray-100 p-6"
+    : "min-h-screen bg-gray-50 text-gray-900 p-6";
 
-      case "MEDIA":
-        return "bg-yellow-100 text-yellow-700";
+  const cardClasses = darkMode
+    ? "rounded-xl border border-gray-800 bg-gray-900 shadow-sm"
+    : "rounded-xl border border-gray-200 bg-white shadow-sm";
 
-      case "BAJA":
-        return "bg-green-100 text-green-700";
-
-      default:
-        return "bg-gray-100 text-gray-600";
-    }
-  }
-
-  function formatDate(date: string) {
-    if (!date) {
-      return "-";
-    }
-
-    return new Date(date).toLocaleDateString(
-      "es-AR",
-      {
-        day: "2-digit",
-        month: "2-digit",
-        year: "numeric",
-      }
-    );
-  }
+  const inputClasses = darkMode
+    ? "w-full rounded-lg border border-gray-700 bg-gray-800 px-3 py-2.5 text-sm text-gray-100 outline-none placeholder:text-gray-500 focus:border-gray-400 focus:ring-2 focus:ring-gray-700"
+    : "w-full rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm text-gray-900 outline-none placeholder:text-gray-400 focus:border-gray-500 focus:ring-2 focus:ring-gray-200";
 
   return (
-    <div className="min-h-screen bg-gray-50 p-6">
+    <div className={pageClasses}>
 
       {/* HEADER */}
       <div className="mb-6 flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+
         <div>
-          <h1 className="text-3xl font-bold text-gray-900">
+          <h1
+            className={`text-3xl font-bold ${
+              darkMode
+                ? "text-white"
+                : "text-gray-900"
+            }`}
+          >
             CRM
           </h1>
 
-          <p className="mt-1 text-sm text-gray-500">
+          <p
+            className={`mt-1 text-sm ${
+              darkMode
+                ? "text-gray-400"
+                : "text-gray-500"
+            }`}
+          >
             Gestión y seguimiento de leads de
             LeadHunter Argentina
           </p>
         </div>
 
-        <button
-          type="button"
-          onClick={loadLeads}
-          disabled={loading || saving}
-          className="rounded-lg bg-gray-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-gray-700 disabled:cursor-not-allowed disabled:opacity-50"
-        >
-          {loading
-            ? "Actualizando..."
-            : "↻ Actualizar"}
-        </button>
+        <div className="flex gap-2">
+
+          {/* DARK MODE */}
+          <button
+            type="button"
+            onClick={() =>
+              setDarkMode((current) => !current)
+            }
+            className={
+              darkMode
+                ? "rounded-lg border border-gray-700 bg-gray-800 px-4 py-2 text-sm font-medium text-gray-100 transition hover:bg-gray-700"
+                : "rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 transition hover:bg-gray-100"
+            }
+          >
+            {darkMode
+              ? "☀️ Modo claro"
+              : "🌙 Modo dark"}
+          </button>
+
+          {/* REFRESH */}
+          <button
+            type="button"
+            onClick={() => void loadLeads()}
+            disabled={loading || saving}
+            className={
+              darkMode
+                ? "rounded-lg bg-white px-4 py-2 text-sm font-medium text-gray-900 transition hover:bg-gray-200 disabled:cursor-not-allowed disabled:opacity-50"
+                : "rounded-lg bg-gray-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-gray-700 disabled:cursor-not-allowed disabled:opacity-50"
+            }
+          >
+            {loading
+              ? "Actualizando..."
+              : "↻ Actualizar"}
+          </button>
+
+        </div>
       </div>
 
       {/* ERROR */}
       {error && (
-        <div className="mb-6 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+        <div
+          className={
+            darkMode
+              ? "mb-6 rounded-lg border border-red-900 bg-red-950/50 px-4 py-3 text-sm text-red-300"
+              : "mb-6 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700"
+          }
+        >
           {error}
         </div>
       )}
@@ -610,35 +609,39 @@ export default function CRMPage() {
           title="Total de leads"
           value={stats.total}
           icon="👥"
+          darkMode={darkMode}
         />
 
         <StatCard
           title="Prioridad alta"
           value={stats.alta}
           icon="🔥"
+          darkMode={darkMode}
         />
 
         <StatCard
           title="Contactados"
           value={stats.contactados}
           icon="📞"
+          darkMode={darkMode}
         />
 
         <StatCard
           title="Favoritos"
           value={stats.favoritos}
           icon="⭐"
+          darkMode={darkMode}
         />
 
       </div>
 
       {/* FILTROS */}
-      <div className="mb-6 rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
+      <div className={`${cardClasses} mb-6 p-5`}>
 
         <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
 
           <div>
-            <label className="mb-2 block text-sm font-medium text-gray-700">
+            <label className="mb-2 block text-sm font-medium">
               Buscar
             </label>
 
@@ -648,34 +651,35 @@ export default function CRMPage() {
               onChange={(event) =>
                 setSearch(event.target.value)
               }
-              placeholder="Nombre, ciudad, teléfono, email..."
-              className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm text-gray-900 outline-none placeholder:text-gray-400 focus:border-gray-500 focus:ring-2 focus:ring-gray-200"
+              placeholder="Nombre, ciudad, teléfono..."
+              className={inputClasses}
             />
           </div>
 
           <div>
-            <label className="mb-2 block text-sm font-medium text-gray-700">
+            <label className="mb-2 block text-sm font-medium">
               Prioridad
             </label>
 
             <select
               value={priorityFilter}
               onChange={(event) =>
-                setPriorityFilter(
-                  event.target.value
-                )
+                setPriorityFilter(event.target.value)
               }
-              className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm text-gray-900 outline-none focus:border-gray-500 focus:ring-2 focus:ring-gray-200"
+              className={inputClasses}
             >
               <option value="TODAS">
                 Todas
               </option>
+
               <option value="ALTA">
                 Alta
               </option>
+
               <option value="MEDIA">
                 Media
               </option>
+
               <option value="BAJA">
                 Baja
               </option>
@@ -683,28 +687,29 @@ export default function CRMPage() {
           </div>
 
           <div>
-            <label className="mb-2 block text-sm font-medium text-gray-700">
+            <label className="mb-2 block text-sm font-medium">
               Estado
             </label>
 
             <select
               value={statusFilter}
               onChange={(event) =>
-                setStatusFilter(
-                  event.target.value
-                )
+                setStatusFilter(event.target.value)
               }
-              className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm text-gray-900 outline-none focus:border-gray-500 focus:ring-2 focus:ring-gray-200"
+              className={inputClasses}
             >
               <option value="TODOS">
                 Todos
               </option>
+
               <option value="NO_CONTACTADOS">
                 No contactados
               </option>
+
               <option value="CONTACTADOS">
                 Contactados
               </option>
+
               <option value="FAVORITOS">
                 Favoritos
               </option>
@@ -712,267 +717,301 @@ export default function CRMPage() {
           </div>
 
         </div>
+
       </div>
 
       {/* TABLA */}
-      <div className="rounded-xl border border-gray-200 bg-white shadow-sm">
+      <div className={cardClasses}>
 
-        <div className="border-b border-gray-200 px-5 py-4">
-          <h2 className="text-lg font-semibold text-gray-900">
-            Leads
-          </h2>
+        <div
+          className={`border-b px-5 py-4 ${
+            darkMode
+              ? "border-gray-800"
+              : "border-gray-200"
+          }`}
+        >
+          <div className="flex items-center justify-between">
 
-          <p className="mt-1 text-sm text-gray-500">
-            Mostrando {filteredLeads.length} de{" "}
-            {leads.length}
-          </p>
+            <h2 className="text-lg font-semibold">
+              Leads
+            </h2>
+
+            <span
+              className={`text-sm ${
+                darkMode
+                  ? "text-gray-400"
+                  : "text-gray-500"
+              }`}
+            >
+              Mostrando {filteredLeads.length} de{" "}
+              {leads.length}
+            </span>
+
+          </div>
         </div>
 
         {loading ? (
-          <div className="p-10 text-center text-sm text-gray-500">
+          <div className="p-10 text-center text-sm opacity-60">
             Cargando leads...
           </div>
         ) : filteredLeads.length === 0 ? (
-          <div className="p-10 text-center text-sm text-gray-500">
-            No hay leads que coincidan con los
-            filtros.
+          <div className="p-10 text-center text-sm opacity-60">
+            No se encontraron leads.
           </div>
         ) : (
           <div className="overflow-x-auto">
 
-            <table className="min-w-full">
+            <table className="min-w-262.5">
 
-              <thead className="bg-gray-50">
+              <thead
+                className={
+                  darkMode
+                    ? "bg-gray-800"
+                    : "bg-gray-50"
+                }
+              >
+                <tr>
 
-                <tr className="border-b border-gray-200 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">
-
-                  <th className="px-5 py-3">
+                  <th className="px-5 py-3 text-left text-xs font-semibold uppercase">
                     Lead
                   </th>
 
-                  <th className="px-5 py-3">
+                  <th className="px-5 py-3 text-left text-xs font-semibold uppercase">
                     Categoría
                   </th>
 
-                  <th className="px-5 py-3">
+                  <th className="px-5 py-3 text-left text-xs font-semibold uppercase">
                     Ubicación
                   </th>
 
-                  <th className="px-5 py-3">
+                  <th className="px-5 py-3 text-left text-xs font-semibold uppercase">
                     Contacto
                   </th>
 
-                  <th className="px-5 py-3">
+                  <th className="px-5 py-3 text-left text-xs font-semibold uppercase">
                     Score
                   </th>
 
-                  <th className="px-5 py-3">
+                  <th className="px-5 py-3 text-left text-xs font-semibold uppercase">
                     Prioridad
                   </th>
 
-                  <th className="px-5 py-3">
+                  <th className="px-5 py-3 text-left text-xs font-semibold uppercase">
                     Estado
                   </th>
 
-                  <th className="px-5 py-3">
+                  <th className="px-5 py-3 text-left text-xs font-semibold uppercase">
                     Fecha
                   </th>
 
-                  <th className="px-5 py-3 text-right">
+                  <th className="px-5 py-3 text-right text-xs font-semibold uppercase">
                     Acciones
                   </th>
 
                 </tr>
-
               </thead>
 
-              <tbody className="divide-y divide-gray-100">
+              <tbody
+                className={
+                  darkMode
+                    ? "divide-y divide-gray-800"
+                    : "divide-y divide-gray-200"
+                }
+              >
 
-                {filteredLeads.map(
-                  (lead) => (
-                    <tr
-                      key={lead.id}
-                      className="transition hover:bg-gray-50"
-                    >
+                {filteredLeads.map((lead) => (
 
-                      {/* LEAD */}
-                      <td className="px-5 py-4">
+                  <tr
+                    key={lead.id}
+                    className={
+                      darkMode
+                        ? "hover:bg-gray-800/60"
+                        : "hover:bg-gray-50"
+                    }
+                  >
 
-                        <div className="flex items-start gap-3">
+                    {/* LEAD */}
+                    <td className="px-5 py-4">
 
-                          <button
-                            type="button"
-                            onClick={() =>
-                              toggleFavorite(lead)
-                            }
-                            disabled={saving}
-                            title={
-                              lead.favorite
-                                ? "Quitar favorito"
-                                : "Agregar favorito"
-                            }
-                            className="mt-0.5 text-xl leading-none disabled:opacity-50"
-                          >
-                            {lead.favorite
-                              ? "★"
-                              : "☆"}
-                          </button>
-
-                          <div>
-                            <div className="font-semibold text-gray-900">
-                              {lead.name}
-                            </div>
-
-                            {lead.email && (
-                              <div className="mt-1 text-xs text-gray-500">
-                                {lead.email}
-                              </div>
-                            )}
-                          </div>
-
-                        </div>
-
-                      </td>
-
-                      {/* CATEGORIA */}
-                      <td className="px-5 py-4 text-sm text-gray-700">
-                        {lead.category || "-"}
-                      </td>
-
-                      {/* UBICACION */}
-                      <td className="px-5 py-4">
-
-                        <div className="text-sm font-medium text-gray-800">
-                          {lead.city || "-"}
-                        </div>
-
-                        {lead.province && (
-                          <div className="text-xs text-gray-500">
-                            {lead.province}
-                          </div>
-                        )}
-
-                      </td>
-
-                      {/* CONTACTO */}
-                      <td className="px-5 py-4">
-
-                        {lead.phone ? (
-                          <a
-                            href={`tel:${lead.phone}`}
-                            className="text-sm font-semibold text-blue-600 hover:underline"
-                          >
-                            {lead.phone}
-                          </a>
-                        ) : (
-                          <span className="text-sm text-gray-400">
-                            -
-                          </span>
-                        )}
-
-                      </td>
-
-                      {/* SCORE */}
-                      <td className="px-5 py-4">
-
-                        <div className="font-bold text-gray-900">
-                          {lead.score ?? "-"}
-
-                          {lead.score !== null && (
-                            <span className="font-normal text-gray-400">
-                              /100
-                            </span>
-                          )}
-                        </div>
-
-                      </td>
-
-                      {/* PRIORIDAD */}
-                      <td className="px-5 py-4">
-
-                        <span
-                          className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${priorityClass(
-                            lead.priority
-                          )}`}
-                        >
-                          {lead.priority ||
-                            "SIN PRIORIDAD"}
-                        </span>
-
-                      </td>
-
-                      {/* ESTADO */}
-                      <td className="px-5 py-4">
+                      <div className="flex items-center gap-3">
 
                         <button
                           type="button"
                           onClick={() =>
-                            toggleContacted(lead)
+                            void toggleFavorite(lead)
                           }
                           disabled={saving}
-                          className={`rounded-full px-3 py-1 text-xs font-semibold transition ${
-                            lead.contacted
-                              ? "bg-green-100 text-green-700 hover:bg-green-200"
-                              : "bg-gray-100 text-gray-600 hover:bg-gray-200"
-                          }`}
+                          className="text-xl disabled:opacity-50"
+                          title={
+                            lead.favorite
+                              ? "Quitar favorito"
+                              : "Agregar favorito"
+                          }
                         >
-                          {lead.contacted
-                            ? "Contactado"
-                            : "No contactado"}
+                          {lead.favorite
+                            ? "★"
+                            : "☆"}
                         </button>
 
-                      </td>
+                        <div>
+                          <div className="font-semibold">
+                            {lead.name}
+                          </div>
 
-                      {/* FECHA */}
-                      <td className="px-5 py-4 text-sm text-gray-500">
-                        {formatDate(
-                          lead.createdAt
-                        )}
-                      </td>
-
-                      {/* ACCIONES */}
-                      <td className="px-5 py-4">
-
-                        <div className="flex justify-end gap-2">
-
-                          <button
-                            type="button"
-                            onClick={() =>
-                              openLead(lead)
-                            }
-                            className="rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-100"
-                          >
-                            Ver
-                          </button>
-
-                          <button
-                            type="button"
-                            onClick={() =>
-                              startEditing(lead)
-                            }
-                            className="rounded-lg bg-gray-900 px-3 py-1.5 text-xs font-medium text-white hover:bg-gray-700"
-                          >
-                            Editar
-                          </button>
-
-                          <button
-                            type="button"
-                            onClick={() =>
-                              deleteLead(lead)
-                            }
-                            disabled={saving}
-                            className="rounded-lg border border-red-200 bg-white px-3 py-1.5 text-xs font-medium text-red-600 hover:bg-red-50 disabled:opacity-50"
-                          >
-                            Eliminar
-                          </button>
-
+                          {lead.email && (
+                            <div className="mt-1 text-xs opacity-60">
+                              {lead.email}
+                            </div>
+                          )}
                         </div>
 
-                      </td>
+                      </div>
 
-                    </tr>
-                  )
-                )}
+                    </td>
+
+                    {/* CATEGORIA */}
+                    <td className="px-5 py-4 text-sm">
+                      {lead.category || "-"}
+                    </td>
+
+                    {/* UBICACION */}
+                    <td className="px-5 py-4">
+
+                      <div className="text-sm font-medium">
+                        {lead.city || "-"}
+                      </div>
+
+                      {lead.province && (
+                        <div className="text-xs opacity-60">
+                          {lead.province}
+                        </div>
+                      )}
+
+                    </td>
+
+                    {/* CONTACTO */}
+                    <td className="px-5 py-4">
+
+                      {lead.phone ? (
+                        <a
+                          href={`tel:${lead.phone}`}
+                          className={
+                            darkMode
+                              ? "text-sm font-semibold text-blue-400 hover:underline"
+                              : "text-sm font-semibold text-blue-600 hover:underline"
+                          }
+                        >
+                          {lead.phone}
+                        </a>
+                      ) : (
+                        <span className="text-sm opacity-40">
+                          -
+                        </span>
+                      )}
+
+                    </td>
+
+                    {/* SCORE */}
+                    <td className="px-5 py-4">
+
+                      <span className="font-bold">
+                        {lead.score ?? "-"}
+                      </span>
+
+                      {lead.score !== null && (
+                        <span className="opacity-40">
+                          /100
+                        </span>
+                      )}
+
+                    </td>
+
+                    {/* PRIORIDAD */}
+                    <td className="px-5 py-4">
+
+                      <span
+                        className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${priorityClass(
+                          lead.priority
+                        )}`}
+                      >
+                        {lead.priority ||
+                          "SIN PRIORIDAD"}
+                      </span>
+
+                    </td>
+
+                    {/* ESTADO */}
+                    <td className="px-5 py-4">
+
+                      <button
+                        type="button"
+                        onClick={() =>
+                          void toggleContacted(lead)
+                        }
+                        disabled={saving}
+                        className={
+                          lead.contacted
+                            ? darkMode
+                              ? "rounded-full bg-green-950 px-3 py-1 text-xs font-semibold text-green-300"
+                              : "rounded-full bg-green-100 px-3 py-1 text-xs font-semibold text-green-700"
+                            : darkMode
+                              ? "rounded-full bg-gray-800 px-3 py-1 text-xs font-semibold text-gray-400"
+                              : "rounded-full bg-gray-100 px-3 py-1 text-xs font-semibold text-gray-600"
+                        }
+                      >
+                        {lead.contacted
+                          ? "Contactado"
+                          : "No contactado"}
+                      </button>
+
+                    </td>
+
+                    {/* FECHA */}
+                    <td className="px-5 py-4 text-sm opacity-60">
+                      {formatDate(lead.createdAt)}
+                    </td>
+
+                    {/* ACCIONES */}
+                    <td className="px-5 py-4">
+
+                      <div className="flex justify-end gap-2">
+
+                        <button
+                          type="button"
+                          onClick={() =>
+                            openLead(lead)
+                          }
+                          className={
+                            darkMode
+                              ? "rounded-lg border border-gray-700 px-3 py-1.5 text-xs font-medium hover:bg-gray-800"
+                              : "rounded-lg border border-gray-300 px-3 py-1.5 text-xs font-medium hover:bg-gray-100"
+                          }
+                        >
+                          Ver / Editar
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() =>
+                            void deleteLead(lead)
+                          }
+                          disabled={saving}
+                          className={
+                            darkMode
+                              ? "rounded-lg border border-red-900 px-3 py-1.5 text-xs font-medium text-red-400 hover:bg-red-950 disabled:opacity-50"
+                              : "rounded-lg border border-red-200 px-3 py-1.5 text-xs font-medium text-red-600 hover:bg-red-50 disabled:opacity-50"
+                          }
+                        >
+                          Eliminar
+                        </button>
+
+                      </div>
+
+                    </td>
+
+                  </tr>
+
+                ))}
 
               </tbody>
 
@@ -983,247 +1022,45 @@ export default function CRMPage() {
 
       </div>
 
-      {/* =====================================================
-          MODAL DETALLE
-          ===================================================== */}
-
+      {/* MODAL */}
       {selectedLead && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
 
-          <div className="max-h-[90vh] w-full max-w-3xl overflow-y-auto rounded-2xl bg-white shadow-2xl">
+          <div
+            className={
+              darkMode
+                ? "max-h-[95vh] w-full max-w-5xl overflow-y-auto rounded-2xl border border-gray-800 bg-gray-900 shadow-2xl"
+                : "max-h-[95vh] w-full max-w-5xl overflow-y-auto rounded-2xl bg-white shadow-2xl"
+            }
+          >
 
-            {/* HEADER */}
-            <div className="flex items-center justify-between border-b border-gray-200 px-6 py-5">
+            {/* MODAL HEADER */}
+            <div
+              className={`sticky top-0 z-10 flex items-center justify-between border-b px-6 py-4 ${
+                darkMode
+                  ? "border-gray-800 bg-gray-900"
+                  : "border-gray-200 bg-white"
+              }`}
+            >
 
-              <div className="min-w-0 pr-4">
-
-                <h2 className="break-words text-xl font-bold text-gray-900">
-                  {selectedLead.name}
+              <div>
+                <h2 className="text-xl font-bold">
+                  {editing
+                    ? "Editar lead"
+                    : selectedLead.name}
                 </h2>
 
-                <p className="mt-1 text-sm text-gray-500">
-                  Detalle del lead
+                <p className="text-sm opacity-60">
+                  {editing
+                    ? "Modificá los datos y guardá los cambios."
+                    : "Detalle del lead"}
                 </p>
-
               </div>
 
               <button
                 type="button"
                 onClick={closeLead}
-                disabled={saving}
-                className="rounded-lg px-3 py-2 text-2xl leading-none text-gray-500 hover:bg-gray-100 disabled:opacity-50"
-              >
-                ×
-              </button>
-
-            </div>
-
-            {/* DATOS */}
-            <div className="grid grid-cols-1 gap-5 p-6 sm:grid-cols-2">
-
-              <DetailItem
-                label="Categoría"
-                value={
-                  selectedLead.category
-                }
-              />
-
-              <DetailItem
-                label="Teléfono"
-                value={
-                  selectedLead.phone
-                }
-              />
-
-              <DetailItem
-                label="Email"
-                value={
-                  selectedLead.email
-                }
-              />
-
-              <DetailItem
-                label="Ciudad"
-                value={
-                  selectedLead.city
-                }
-              />
-
-              <DetailItem
-                label="Provincia"
-                value={
-                  selectedLead.province
-                }
-              />
-
-              <DetailItem
-                label="Dirección"
-                value={
-                  selectedLead.address
-                }
-              />
-
-              <DetailItem
-                label="Score"
-                value={
-                  selectedLead.score !== null
-                    ? `${selectedLead.score}/100`
-                    : null
-                }
-              />
-
-              <DetailItem
-                label="Prioridad"
-                value={
-                  selectedLead.priority
-                }
-              />
-
-              <DetailItem
-                label="Fuente"
-                value={
-                  selectedLead.source
-                }
-              />
-
-              <DetailItem
-                label="Fecha"
-                value={formatDate(
-                  selectedLead.createdAt
-                )}
-              />
-
-              {selectedLead.website && (
-                <DetailLink
-                  label="Website"
-                  value={
-                    selectedLead.website
-                  }
-                />
-              )}
-
-              {selectedLead.facebook && (
-                <DetailLink
-                  label="Facebook"
-                  value={
-                    selectedLead.facebook
-                  }
-                />
-              )}
-
-              {selectedLead.instagram && (
-                <DetailLink
-                  label="Instagram"
-                  value={
-                    selectedLead.instagram
-                  }
-                />
-              )}
-
-              <div className="sm:col-span-2">
-
-                <div className="mb-2 text-xs font-medium uppercase text-gray-400">
-                  Notas
-                </div>
-
-                <div className="whitespace-pre-wrap rounded-lg border border-gray-200 bg-gray-50 p-4 text-sm text-gray-700">
-                  {selectedLead.notes ||
-                    "Sin notas."}
-                </div>
-
-              </div>
-
-            </div>
-
-            {/* ACCIONES */}
-            <div className="flex flex-wrap gap-3 border-t border-gray-200 px-6 py-4">
-
-              <button
-                type="button"
-                disabled={saving}
-                onClick={() =>
-                  startEditing(selectedLead)
-                }
-                className="rounded-lg bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-700 disabled:opacity-50"
-              >
-                ✎ Editar datos
-              </button>
-
-              <button
-                type="button"
-                disabled={saving}
-                onClick={() =>
-                  toggleFavorite(selectedLead)
-                }
-                className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 disabled:opacity-50"
-              >
-                {selectedLead.favorite
-                  ? "★ Quitar favorito"
-                  : "☆ Agregar favorito"}
-              </button>
-
-              <button
-                type="button"
-                disabled={saving}
-                onClick={() =>
-                  toggleContacted(
-                    selectedLead
-                  )
-                }
-                className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 disabled:opacity-50"
-              >
-                {selectedLead.contacted
-                  ? "Marcar no contactado"
-                  : "✓ Marcar contactado"}
-              </button>
-
-              <button
-                type="button"
-                disabled={saving}
-                onClick={() =>
-                  deleteLead(selectedLead)
-                }
-                className="rounded-lg border border-red-200 px-4 py-2 text-sm font-medium text-red-600 hover:bg-red-50 disabled:opacity-50"
-              >
-                Eliminar lead
-              </button>
-
-            </div>
-
-          </div>
-
-        </div>
-      )}
-
-      {/* =====================================================
-          MODAL EDICIÓN
-          ===================================================== */}
-
-      {editingLead && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 p-3 sm:p-6">
-
-          <div className="flex max-h-[95vh] w-full max-w-5xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl">
-
-            {/* HEADER */}
-            <div className="flex shrink-0 items-center justify-between border-b border-gray-200 bg-white px-5 py-4 sm:px-7">
-
-              <div className="min-w-0 pr-4">
-
-                <h2 className="text-xl font-bold text-gray-900 sm:text-2xl">
-                  Editar lead
-                </h2>
-
-                <p className="mt-1 break-words text-sm text-gray-500">
-                  {editingLead.name}
-                </p>
-
-              </div>
-
-              <button
-                type="button"
-                onClick={cancelEditing}
-                disabled={saving}
-                className="rounded-lg px-3 py-2 text-2xl leading-none text-gray-500 hover:bg-gray-100 disabled:opacity-50"
+                className="rounded-lg px-3 py-2 text-2xl opacity-60 hover:bg-gray-500/10"
               >
                 ×
               </button>
@@ -1231,331 +1068,487 @@ export default function CRMPage() {
             </div>
 
             {/* FORMULARIO */}
-            <div className="overflow-y-auto bg-gray-50 px-5 py-6 sm:px-7">
+            <div className="p-6">
 
-              <div className="space-y-6">
+              {editing ? (
 
-                {/* INFORMACION PRINCIPAL */}
-                <section className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
+                <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
 
-                  <h3 className="mb-4 text-base font-semibold text-gray-900">
-                    Información principal
-                  </h3>
-
-                  <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-
-                    <FormField
-                      label="Nombre"
-                      required
-                      value={editForm.name}
-                      onChange={(value) =>
-                        updateForm(
-                          "name",
-                          value
-                        )
-                      }
-                      placeholder="Nombre del negocio"
-                    />
-
-                    <FormField
-                      label="Categoría"
-                      value={
-                        editForm.category
-                      }
-                      onChange={(value) =>
-                        updateForm(
-                          "category",
-                          value
-                        )
-                      }
-                      placeholder="Ej. ferretería"
-                    />
-
-                    <FormField
-                      label="Teléfono"
-                      value={
-                        editForm.phone
-                      }
-                      onChange={(value) =>
-                        updateForm(
-                          "phone",
-                          value
-                        )
-                      }
-                      placeholder="Ej. 2266412345"
-                    />
-
-                    <FormField
-                      label="Email"
-                      type="email"
-                      value={
-                        editForm.email
-                      }
-                      onChange={(value) =>
-                        updateForm(
-                          "email",
-                          value
-                        )
-                      }
-                      placeholder="correo@empresa.com"
-                    />
-
-                  </div>
-
-                </section>
-
-                {/* UBICACION */}
-                <section className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
-
-                  <h3 className="mb-4 text-base font-semibold text-gray-900">
-                    Ubicación
-                  </h3>
-
-                  <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-
-                    <FormField
-                      label="Ciudad"
-                      value={
-                        editForm.city
-                      }
-                      onChange={(value) =>
-                        updateForm(
-                          "city",
-                          value
-                        )
-                      }
-                      placeholder="Ej. Balcarce"
-                    />
-
-                    <FormField
-                      label="Provincia"
-                      value={
-                        editForm.province
-                      }
-                      onChange={(value) =>
-                        updateForm(
-                          "province",
-                          value
-                        )
-                      }
-                      placeholder="Ej. Buenos Aires"
-                    />
-
-                    <div className="md:col-span-2">
-
-                      <FormField
-                        label="Dirección"
-                        value={
-                          editForm.address
-                        }
-                        onChange={(value) =>
-                          updateForm(
-                            "address",
-                            value
-                          )
-                        }
-                        placeholder="Dirección del negocio"
-                      />
-
-                    </div>
-
-                  </div>
-
-                </section>
-
-                {/* WEB Y REDES */}
-                <section className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
-
-                  <h3 className="mb-4 text-base font-semibold text-gray-900">
-                    Web y redes sociales
-                  </h3>
-
-                  <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-
-                    <FormField
-                      label="Website"
-                      type="url"
-                      value={
-                        editForm.website
-                      }
-                      onChange={(value) =>
-                        updateForm(
-                          "website",
-                          value
-                        )
-                      }
-                      placeholder="https://..."
-                    />
-
-                    <FormField
-                      label="Facebook"
-                      type="url"
-                      value={
-                        editForm.facebook
-                      }
-                      onChange={(value) =>
-                        updateForm(
-                          "facebook",
-                          value
-                        )
-                      }
-                      placeholder="https://facebook.com/..."
-                    />
-
-                    <FormField
-                      label="Instagram"
-                      type="url"
-                      value={
-                        editForm.instagram
-                      }
-                      onChange={(value) =>
-                        updateForm(
-                          "instagram",
-                          value
-                        )
-                      }
-                      placeholder="https://instagram.com/..."
-                    />
-
-                    <FormField
-                      label="Fuente"
-                      value={
-                        editForm.source
-                      }
-                      onChange={(value) =>
-                        updateForm(
-                          "source",
-                          value
-                        )
-                      }
-                      placeholder="Ej. Google, OSM, CRM..."
-                    />
-
-                  </div>
-
-                </section>
-
-                {/* SCORING */}
-                <section className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
-
-                  <h3 className="mb-4 text-base font-semibold text-gray-900">
-                    Clasificación
-                  </h3>
-
-                  <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-
-                    <FormField
-                      label="Score"
-                      type="number"
-                      min="0"
-                      max="100"
-                      value={
-                        editForm.score
-                      }
-                      onChange={(value) =>
-                        updateForm(
-                          "score",
-                          value
-                        )
-                      }
-                      placeholder="0 - 100"
-                    />
-
-                    <div>
-
-                      <label className="mb-2 block text-sm font-medium text-gray-700">
-                        Prioridad
-                      </label>
-
-                      <select
-                        value={
-                          editForm.priority
-                        }
-                        onChange={(event) =>
-                          updateForm(
-                            "priority",
-                            event.target.value
-                          )
-                        }
-                        className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm text-gray-900 outline-none focus:border-gray-500 focus:ring-2 focus:ring-gray-200"
-                      >
-                        <option value="">
-                          Sin prioridad
-                        </option>
-
-                        <option value="ALTA">
-                          Alta
-                        </option>
-
-                        <option value="MEDIA">
-                          Media
-                        </option>
-
-                        <option value="BAJA">
-                          Baja
-                        </option>
-
-                      </select>
-
-                    </div>
-
-                  </div>
-
-                </section>
-
-                {/* NOTAS */}
-                <section className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
-
-                  <h3 className="mb-4 text-base font-semibold text-gray-900">
-                    Notas
-                  </h3>
-
-                  <textarea
-                    value={
-                      editForm.notes
+                  <FormField
+                    label="Nombre"
+                    value={form.name}
+                    onChange={(value) =>
+                      updateForm("name", value)
                     }
-                    onChange={(event) =>
-                      updateForm(
-                        "notes",
-                        event.target.value
-                      )
-                    }
-                    rows={6}
-                    placeholder="Agregar información, observaciones, seguimiento comercial..."
-                    className="w-full resize-y rounded-lg border border-gray-300 bg-white px-3 py-3 text-sm leading-6 text-gray-900 outline-none placeholder:text-gray-400 focus:border-gray-500 focus:ring-2 focus:ring-gray-200"
+                    darkMode={darkMode}
+                    required
                   />
 
-                </section>
+                  <FormField
+                    label="Categoría"
+                    value={form.category}
+                    onChange={(value) =>
+                      updateForm("category", value)
+                    }
+                    darkMode={darkMode}
+                  />
 
-              </div>
+                  <FormField
+                    label="Ciudad"
+                    value={form.city}
+                    onChange={(value) =>
+                      updateForm("city", value)
+                    }
+                    darkMode={darkMode}
+                  />
+
+                  <FormField
+                    label="Provincia"
+                    value={form.province}
+                    onChange={(value) =>
+                      updateForm("province", value)
+                    }
+                    darkMode={darkMode}
+                  />
+
+                  <FormField
+                    label="Dirección"
+                    value={form.address}
+                    onChange={(value) =>
+                      updateForm("address", value)
+                    }
+                    darkMode={darkMode}
+                  />
+
+                  <FormField
+                    label="Teléfono"
+                    value={form.phone}
+                    onChange={(value) =>
+                      updateForm("phone", value)
+                    }
+                    darkMode={darkMode}
+                  />
+
+                  <FormField
+                    label="Email"
+                    type="email"
+                    value={form.email}
+                    onChange={(value) =>
+                      updateForm("email", value)
+                    }
+                    darkMode={darkMode}
+                  />
+
+                  <FormField
+                    label="Website"
+                    value={form.website}
+                    onChange={(value) =>
+                      updateForm("website", value)
+                    }
+                    darkMode={darkMode}
+                  />
+
+                  <FormField
+                    label="Facebook"
+                    value={form.facebook}
+                    onChange={(value) =>
+                      updateForm("facebook", value)
+                    }
+                    darkMode={darkMode}
+                  />
+
+                  <FormField
+                    label="Instagram"
+                    value={form.instagram}
+                    onChange={(value) =>
+                      updateForm("instagram", value)
+                    }
+                    darkMode={darkMode}
+                  />
+
+                  <FormField
+                    label="Latitud"
+                    type="number"
+                    value={form.latitude}
+                    onChange={(value) =>
+                      updateForm("latitude", value)
+                    }
+                    darkMode={darkMode}
+                  />
+
+                  <FormField
+                    label="Longitud"
+                    type="number"
+                    value={form.longitude}
+                    onChange={(value) =>
+                      updateForm("longitude", value)
+                    }
+                    darkMode={darkMode}
+                  />
+
+                  <FormField
+                    label="Score"
+                    type="number"
+                    value={form.score}
+                    onChange={(value) =>
+                      updateForm("score", value)
+                    }
+                    darkMode={darkMode}
+                  />
+
+                  <div>
+
+                    <label className="mb-2 block text-sm font-semibold">
+                      Prioridad
+                    </label>
+
+                    <select
+                      value={form.priority}
+                      onChange={(event) =>
+                        updateForm(
+                          "priority",
+                          event.target.value
+                        )
+                      }
+                      className={inputClasses}
+                    >
+                      <option value="">
+                        Sin prioridad
+                      </option>
+
+                      <option value="ALTA">
+                        Alta
+                      </option>
+
+                      <option value="MEDIA">
+                        Media
+                      </option>
+
+                      <option value="BAJA">
+                        Baja
+                      </option>
+
+                    </select>
+
+                  </div>
+
+                  <FormField
+                    label="Fuente"
+                    value={form.source}
+                    onChange={(value) =>
+                      updateForm("source", value)
+                    }
+                    darkMode={darkMode}
+                  />
+
+                  <div className="md:col-span-2">
+
+                    <label className="mb-2 block text-sm font-semibold">
+                      Notas
+                    </label>
+
+                    <textarea
+                      value={form.notes}
+                      onChange={(event) =>
+                        updateForm(
+                          "notes",
+                          event.target.value
+                        )
+                      }
+                      rows={5}
+                      className={inputClasses}
+                      placeholder="Notas del lead..."
+                    />
+
+                  </div>
+
+                  <div className="flex flex-wrap gap-6 md:col-span-2">
+
+                    <label className="flex cursor-pointer items-center gap-2 text-sm font-medium">
+
+                      <input
+                        type="checkbox"
+                        checked={form.favorite}
+                        onChange={(event) =>
+                          updateForm(
+                            "favorite",
+                            event.target.checked
+                          )
+                        }
+                        className="h-4 w-4"
+                      />
+
+                      ⭐ Favorito
+
+                    </label>
+
+                    <label className="flex cursor-pointer items-center gap-2 text-sm font-medium">
+
+                      <input
+                        type="checkbox"
+                        checked={form.contacted}
+                        onChange={(event) =>
+                          updateForm(
+                            "contacted",
+                            event.target.checked
+                          )
+                        }
+                        className="h-4 w-4"
+                      />
+
+                      📞 Contactado
+
+                    </label>
+
+                  </div>
+
+                </div>
+
+              ) : (
+
+                <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+
+                  <DetailItem
+                    label="Nombre"
+                    value={selectedLead.name}
+                  />
+
+                  <DetailItem
+                    label="Categoría"
+                    value={selectedLead.category}
+                  />
+
+                  <DetailItem
+                    label="Ciudad"
+                    value={selectedLead.city}
+                  />
+
+                  <DetailItem
+                    label="Provincia"
+                    value={selectedLead.province}
+                  />
+
+                  <DetailItem
+                    label="Dirección"
+                    value={selectedLead.address}
+                  />
+
+                  <DetailItem
+                    label="Teléfono"
+                    value={selectedLead.phone}
+                  />
+
+                  <DetailItem
+                    label="Email"
+                    value={selectedLead.email}
+                  />
+
+                  <DetailItem
+                    label="Website"
+                    value={selectedLead.website}
+                  />
+
+                  <DetailItem
+                    label="Facebook"
+                    value={selectedLead.facebook}
+                  />
+
+                  <DetailItem
+                    label="Instagram"
+                    value={selectedLead.instagram}
+                  />
+
+                  <DetailItem
+                    label="Latitud"
+                    value={selectedLead.latitude}
+                  />
+
+                  <DetailItem
+                    label="Longitud"
+                    value={selectedLead.longitude}
+                  />
+
+                  <DetailItem
+                    label="Score"
+                    value={
+                      selectedLead.score !== null
+                        ? `${selectedLead.score}/100`
+                        : null
+                    }
+                  />
+
+                  <DetailItem
+                    label="Prioridad"
+                    value={selectedLead.priority}
+                  />
+
+                  <DetailItem
+                    label="Fuente"
+                    value={selectedLead.source}
+                  />
+
+                  <DetailItem
+                    label="Estado"
+                    value={
+                      selectedLead.contacted
+                        ? "Contactado"
+                        : "No contactado"
+                    }
+                  />
+
+                  <div className="md:col-span-2">
+
+                    <div className="mb-2 text-xs font-semibold uppercase opacity-50">
+                      Notas
+                    </div>
+
+                    <div
+                      className={
+                        darkMode
+                          ? "whitespace-pre-wrap rounded-lg border border-gray-800 bg-gray-950 p-4 text-sm"
+                          : "whitespace-pre-wrap rounded-lg border border-gray-200 bg-gray-50 p-4 text-sm"
+                      }
+                    >
+                      {selectedLead.notes || "Sin notas"}
+                    </div>
+
+                  </div>
+
+                </div>
+
+              )}
 
             </div>
 
-            {/* FOOTER */}
-            <div className="flex shrink-0 flex-col-reverse gap-3 border-t border-gray-200 bg-white px-5 py-4 sm:flex-row sm:justify-end sm:px-7">
+            {/* MODAL FOOTER */}
+            <div
+              className={`flex flex-wrap justify-between gap-3 border-t px-6 py-4 ${
+                darkMode
+                  ? "border-gray-800"
+                  : "border-gray-200"
+              }`}
+            >
 
-              <button
-                type="button"
-                onClick={cancelEditing}
-                disabled={saving}
-                className="rounded-lg border border-gray-300 bg-white px-5 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                Cancelar
-              </button>
+              <div className="flex flex-wrap gap-2">
 
-              <button
-                type="button"
-                onClick={saveLead}
-                disabled={
-                  saving ||
-                  !editForm.name.trim()
-                }
-                className="rounded-lg bg-gray-900 px-5 py-2.5 text-sm font-semibold text-white hover:bg-gray-700 disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                {saving
-                  ? "Guardando..."
-                  : "Guardar cambios"}
-              </button>
+                <button
+                  type="button"
+                  disabled={saving}
+                  onClick={() =>
+                    void toggleFavorite(
+                      selectedLead
+                    )
+                  }
+                  className={
+                    darkMode
+                      ? "rounded-lg border border-gray-700 px-4 py-2 text-sm font-medium hover:bg-gray-800 disabled:opacity-50"
+                      : "rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium hover:bg-gray-100 disabled:opacity-50"
+                  }
+                >
+                  {selectedLead.favorite
+                    ? "★ Quitar favorito"
+                    : "☆ Agregar favorito"}
+                </button>
+
+                <button
+                  type="button"
+                  disabled={saving}
+                  onClick={() =>
+                    void toggleContacted(
+                      selectedLead
+                    )
+                  }
+                  className={
+                    darkMode
+                      ? "rounded-lg border border-gray-700 px-4 py-2 text-sm font-medium hover:bg-gray-800 disabled:opacity-50"
+                      : "rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium hover:bg-gray-100 disabled:opacity-50"
+                  }
+                >
+                  {selectedLead.contacted
+                    ? "Marcar no contactado"
+                    : "✓ Marcar contactado"}
+                </button>
+
+              </div>
+
+              <div className="flex flex-wrap gap-2">
+
+                {editing ? (
+
+                  <>
+                    <button
+                      type="button"
+                      disabled={saving}
+                      onClick={() =>
+                        setEditing(false)
+                      }
+                      className={
+                        darkMode
+                          ? "rounded-lg border border-gray-700 px-4 py-2 text-sm font-medium hover:bg-gray-800 disabled:opacity-50"
+                          : "rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium hover:bg-gray-100 disabled:opacity-50"
+                      }
+                    >
+                      Cancelar
+                    </button>
+
+                    <button
+                      type="button"
+                      disabled={saving}
+                      onClick={() =>
+                        void saveEditedLead()
+                      }
+                      className="rounded-lg bg-blue-600 px-5 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50"
+                    >
+                      {saving
+                        ? "Guardando..."
+                        : "Guardar cambios"}
+                    </button>
+                  </>
+
+                ) : (
+
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setEditing(true)
+                    }
+                    className="rounded-lg bg-blue-600 px-5 py-2 text-sm font-semibold text-white hover:bg-blue-700"
+                  >
+                    ✏️ Editar lead
+                  </button>
+
+                )}
+
+                <button
+                  type="button"
+                  disabled={saving}
+                  onClick={() =>
+                    void deleteLead(
+                      selectedLead
+                    )
+                  }
+                  className={
+                    darkMode
+                      ? "rounded-lg border border-red-900 px-4 py-2 text-sm font-medium text-red-400 hover:bg-red-950 disabled:opacity-50"
+                      : "rounded-lg border border-red-200 px-4 py-2 text-sm font-medium text-red-600 hover:bg-red-50 disabled:opacity-50"
+                  }
+                >
+                  Eliminar
+                </button>
+
+                <button
+                  type="button"
+                  onClick={closeLead}
+                  className={
+                    darkMode
+                      ? "rounded-lg bg-gray-800 px-4 py-2 text-sm font-medium hover:bg-gray-700"
+                      : "rounded-lg bg-gray-100 px-4 py-2 text-sm font-medium hover:bg-gray-200"
+                  }
+                >
+                  Cerrar
+                </button>
+
+              </div>
 
             </div>
 
@@ -1569,72 +1562,31 @@ export default function CRMPage() {
 }
 
 /* ============================================================
-   COMPONENTE: STAT CARD
-   ============================================================ */
-
-function StatCard({
-  title,
-  value,
-  icon,
-}: {
-  title: string;
-  value: number;
-  icon: string;
-}) {
-  return (
-    <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
-
-      <div className="flex items-center justify-between">
-
-        <div>
-
-          <p className="text-sm text-gray-500">
-            {title}
-          </p>
-
-          <p className="mt-2 text-3xl font-bold text-gray-900">
-            {value}
-          </p>
-
-        </div>
-
-        <div className="text-2xl">
-          {icon}
-        </div>
-
-      </div>
-
-    </div>
-  );
-}
-
-/* ============================================================
-   COMPONENTE: CAMPO DE FORMULARIO
+   COMPONENTE FORM FIELD
    ============================================================ */
 
 function FormField({
   label,
   value,
   onChange,
-  placeholder,
+  darkMode,
   type = "text",
   required = false,
-  min,
-  max,
 }: {
   label: string;
   value: string;
   onChange: (value: string) => void;
-  placeholder?: string;
+  darkMode: boolean;
   type?: string;
   required?: boolean;
-  min?: string;
-  max?: string;
 }) {
+  const inputClasses = darkMode
+    ? "w-full rounded-lg border border-gray-700 bg-gray-800 px-3 py-2.5 text-sm text-gray-100 outline-none placeholder:text-gray-500 focus:border-gray-400 focus:ring-2 focus:ring-gray-700"
+    : "w-full rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm text-gray-900 outline-none placeholder:text-gray-400 focus:border-gray-500 focus:ring-2 focus:ring-gray-200";
+
   return (
     <div>
-
-      <label className="mb-2 block text-sm font-medium text-gray-700">
+      <label className="mb-2 block text-sm font-semibold">
         {label}
 
         {required && (
@@ -1650,18 +1602,66 @@ function FormField({
         onChange={(event) =>
           onChange(event.target.value)
         }
-        placeholder={placeholder}
-        min={min}
-        max={max}
-        className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm text-gray-900 outline-none placeholder:text-gray-400 focus:border-gray-500 focus:ring-2 focus:ring-gray-200"
+        className={inputClasses}
       />
-
     </div>
   );
 }
 
 /* ============================================================
-   COMPONENTE: DETALLE
+   COMPONENTE STAT CARD
+   ============================================================ */
+
+function StatCard({
+  title,
+  value,
+  icon,
+  darkMode,
+}: {
+  title: string;
+  value: number;
+  icon: string;
+  darkMode: boolean;
+}) {
+  return (
+    <div
+      className={
+        darkMode
+          ? "rounded-xl border border-gray-800 bg-gray-900 p-5 shadow-sm"
+          : "rounded-xl border border-gray-200 bg-white p-5 shadow-sm"
+      }
+    >
+      <div className="flex items-center justify-between">
+
+        <div>
+
+          <p
+            className={
+              darkMode
+                ? "text-sm text-gray-400"
+                : "text-sm text-gray-500"
+            }
+          >
+            {title}
+          </p>
+
+          <p className="mt-2 text-3xl font-bold">
+            {value}
+          </p>
+
+        </div>
+
+        <div className="text-2xl">
+          {icon}
+        </div>
+
+      </div>
+    </div>
+  );
+}
+
+/* ============================================================
+   COMPONENTE DETALLE
    ============================================================ */
 
 function DetailItem({
@@ -1672,46 +1672,20 @@ function DetailItem({
   value: string | number | null;
 }) {
   return (
-    <div>
+    <div className="min-w-0">
 
-      <div className="mb-1 text-xs font-medium uppercase tracking-wide text-gray-400">
+      <div className="mb-1 text-xs font-semibold uppercase opacity-50">
         {label}
       </div>
 
-      <div className="wrap-break-word text-sm font-medium text-gray-800">
-        {value || "-"}
+      <div className="wrap-break-word text-sm font-medium">
+        {value !== null &&
+        value !== undefined &&
+        value !== ""
+          ? value
+          : "-"}
+
       </div>
-
-    </div>
-  );
-}
-
-/* ============================================================
-   COMPONENTE: LINK
-   ============================================================ */
-
-function DetailLink({
-  label,
-  value,
-}: {
-  label: string;
-  value: string;
-}) {
-  return (
-    <div>
-
-      <div className="mb-1 text-xs font-medium uppercase tracking-wide text-gray-400">
-        {label}
-      </div>
-
-      <a
-        href={value}
-        target="_blank"
-        rel="noopener noreferrer"
-        className="wrap-break-word text-sm font-medium text-blue-600 hover:underline"
-      >
-        {value}
-      </a>
 
     </div>
   );
