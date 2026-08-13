@@ -28,8 +28,10 @@ type Lead = {
 
 type ApiResponse = {
   success: boolean;
-  count: number;
-  results: Lead[];
+  count?: number;
+  results?: Lead[];
+  result?: Lead;
+  message?: string;
   error?: string;
 };
 
@@ -43,6 +45,7 @@ export default function CRMPage() {
   const [statusFilter, setStatusFilter] = useState("TODOS");
 
   const [selectedLead, setSelectedLead] = useState<Lead | null>(null);
+  const [saving, setSaving] = useState(false);
 
   async function loadLeads() {
     try {
@@ -61,7 +64,9 @@ export default function CRMPage() {
       const data: ApiResponse = await response.json();
 
       if (!data.success) {
-        throw new Error(data.error || "No se pudieron cargar los leads.");
+        throw new Error(
+          data.error || "No se pudieron cargar los leads."
+        );
       }
 
       setLeads(data.results || []);
@@ -79,7 +84,54 @@ export default function CRMPage() {
   }
 
   useEffect(() => {
-    loadLeads();
+    const controller = new AbortController();
+
+    async function fetchInitialLeads() {
+      try {
+        const response = await fetch("/api/crm/leads", {
+          method: "GET",
+          cache: "no-store",
+          signal: controller.signal,
+        });
+
+        if (!response.ok) {
+          throw new Error(`Error HTTP ${response.status}`);
+        }
+
+        const data: ApiResponse = await response.json();
+
+        if (!data.success) {
+          throw new Error(
+            data.error || "No se pudieron cargar los leads."
+          );
+        }
+
+        setLeads(data.results || []);
+        setError("");
+      } catch (err) {
+        if (err instanceof DOMException && err.name === "AbortError") {
+          return;
+        }
+
+        console.error("[CRM] Error cargando leads:", err);
+
+        setError(
+          err instanceof Error
+            ? err.message
+            : "No se pudieron cargar los leads."
+        );
+      } finally {
+        if (!controller.signal.aborted) {
+          setLoading(false);
+        }
+      }
+    }
+
+    fetchInitialLeads();
+
+    return () => {
+      controller.abort();
+    };
   }, []);
 
   const filteredLeads = useMemo(() => {
@@ -99,7 +151,9 @@ export default function CRMPage() {
         ]
           .filter(Boolean)
           .some((value) =>
-            String(value).toLowerCase().includes(normalizedSearch)
+            String(value)
+              .toLowerCase()
+              .includes(normalizedSearch)
           );
 
       const matchesPriority =
@@ -119,29 +173,160 @@ export default function CRMPage() {
   const stats = useMemo(() => {
     return {
       total: leads.length,
+
       alta: leads.filter(
-        (lead) => (lead.priority || "").toUpperCase() === "ALTA"
+        (lead) =>
+          (lead.priority || "").toUpperCase() === "ALTA"
       ).length,
-      contactados: leads.filter((lead) => lead.contacted).length,
-      favoritos: leads.filter((lead) => lead.favorite).length,
+
+      contactados: leads.filter(
+        (lead) => lead.contacted
+      ).length,
+
+      favoritos: leads.filter(
+        (lead) => lead.favorite
+      ).length,
     };
   }, [leads]);
+
+  async function updateLead(
+    id: string,
+    changes: Partial<Lead>
+  ) {
+    try {
+      setSaving(true);
+      setError("");
+
+      const response = await fetch("/api/crm/leads", {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          id,
+          ...changes,
+        }),
+      });
+
+      const data: ApiResponse = await response.json();
+
+      if (!response.ok || !data.success || !data.result) {
+        throw new Error(
+          data.error || "No se pudo actualizar el lead."
+        );
+      }
+
+      const updatedLead = data.result;
+
+      setLeads((current) =>
+        current.map((lead) =>
+          lead.id === updatedLead.id
+            ? updatedLead
+            : lead
+        )
+      );
+
+      setSelectedLead((current) =>
+        current?.id === updatedLead.id
+          ? updatedLead
+          : current
+      );
+    } catch (err) {
+      console.error("[CRM] Error actualizando lead:", err);
+
+      setError(
+        err instanceof Error
+          ? err.message
+          : "No se pudo actualizar el lead."
+      );
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function toggleFavorite(lead: Lead) {
+    await updateLead(lead.id, {
+      favorite: !lead.favorite,
+    });
+  }
+
+  async function toggleContacted(lead: Lead) {
+    await updateLead(lead.id, {
+      contacted: !lead.contacted,
+    });
+  }
+
+  async function deleteLead(lead: Lead) {
+    const confirmed = window.confirm(
+      `¿Seguro que querés eliminar "${lead.name}"?`
+    );
+
+    if (!confirmed) {
+      return;
+    }
+
+    try {
+      setSaving(true);
+      setError("");
+
+      const response = await fetch("/api/crm/leads", {
+        method: "DELETE",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          id: lead.id,
+        }),
+      });
+
+      const data: ApiResponse = await response.json();
+
+      if (!response.ok || !data.success) {
+        throw new Error(
+          data.error || "No se pudo eliminar el lead."
+        );
+      }
+
+      setLeads((current) =>
+        current.filter((item) => item.id !== lead.id)
+      );
+
+      setSelectedLead((current) =>
+        current?.id === lead.id ? null : current
+      );
+    } catch (err) {
+      console.error("[CRM] Error eliminando lead:", err);
+
+      setError(
+        err instanceof Error
+          ? err.message
+          : "No se pudo eliminar el lead."
+      );
+    } finally {
+      setSaving(false);
+    }
+  }
 
   function priorityClass(priority: string | null) {
     switch ((priority || "").toUpperCase()) {
       case "ALTA":
         return "bg-red-100 text-red-700";
+
       case "MEDIA":
         return "bg-yellow-100 text-yellow-700";
+
       case "BAJA":
         return "bg-green-100 text-green-700";
+
       default:
         return "bg-gray-100 text-gray-600";
     }
   }
 
   function formatDate(date: string) {
-    if (!date) return "-";
+    if (!date) {
+      return "-";
+    }
 
     return new Date(date).toLocaleDateString("es-AR", {
       day: "2-digit",
@@ -152,10 +337,13 @@ export default function CRMPage() {
 
   return (
     <div className="min-h-screen bg-gray-50 p-6">
+
       {/* HEADER */}
       <div className="mb-6 flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900">CRM</h1>
+          <h1 className="text-3xl font-bold text-gray-900">
+            CRM
+          </h1>
 
           <p className="mt-1 text-sm text-gray-500">
             Gestión y seguimiento de leads de LeadHunter Argentina
@@ -163,16 +351,25 @@ export default function CRMPage() {
         </div>
 
         <button
+          type="button"
           onClick={loadLeads}
-          disabled={loading}
+          disabled={loading || saving}
           className="rounded-lg bg-gray-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-gray-700 disabled:cursor-not-allowed disabled:opacity-50"
         >
           {loading ? "Actualizando..." : "↻ Actualizar"}
         </button>
       </div>
 
+      {/* ERROR */}
+      {error && (
+        <div className="mb-6 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+          {error}
+        </div>
+      )}
+
       {/* ESTADÍSTICAS */}
       <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+
         <StatCard
           title="Total de leads"
           value={stats.total}
@@ -196,33 +393,40 @@ export default function CRMPage() {
           value={stats.favoritos}
           icon="⭐"
         />
+
       </div>
 
       {/* FILTROS */}
-      <div className="mb-6 rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
-        <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
-          <div className="md:col-span-2">
-            <label className="mb-1 block text-xs font-medium text-gray-500">
+      <div className="mb-6 rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
+
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+
+          <div>
+            <label className="mb-2 block text-sm font-medium text-gray-700">
               Buscar
             </label>
 
             <input
               type="text"
               value={search}
-              onChange={(event) => setSearch(event.target.value)}
-              placeholder="Nombre, rubro, ciudad, teléfono..."
+              onChange={(event) =>
+                setSearch(event.target.value)
+              }
+              placeholder="Nombre, ciudad, teléfono..."
               className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none transition focus:border-gray-500 focus:ring-2 focus:ring-gray-200"
             />
           </div>
 
           <div>
-            <label className="mb-1 block text-xs font-medium text-gray-500">
+            <label className="mb-2 block text-sm font-medium text-gray-700">
               Prioridad
             </label>
 
             <select
               value={priorityFilter}
-              onChange={(event) => setPriorityFilter(event.target.value)}
+              onChange={(event) =>
+                setPriorityFilter(event.target.value)
+              }
               className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-gray-500"
             >
               <option value="TODAS">Todas</option>
@@ -233,43 +437,44 @@ export default function CRMPage() {
           </div>
 
           <div>
-            <label className="mb-1 block text-xs font-medium text-gray-500">
+            <label className="mb-2 block text-sm font-medium text-gray-700">
               Estado
             </label>
 
             <select
               value={statusFilter}
-              onChange={(event) => setStatusFilter(event.target.value)}
+              onChange={(event) =>
+                setStatusFilter(event.target.value)
+              }
               className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-gray-500"
             >
               <option value="TODOS">Todos</option>
-              <option value="NO_CONTACTADOS">No contactados</option>
-              <option value="CONTACTADOS">Contactados</option>
-              <option value="FAVORITOS">Favoritos</option>
+              <option value="NO_CONTACTADOS">
+                No contactados
+              </option>
+              <option value="CONTACTADOS">
+                Contactados
+              </option>
+              <option value="FAVORITOS">
+                Favoritos
+              </option>
             </select>
           </div>
+
         </div>
       </div>
 
-      {/* ERROR */}
-      {error && (
-        <div className="mb-6 rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700">
-          <strong>Error:</strong> {error}
-        </div>
-      )}
-
       {/* TABLA */}
-      <div className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
-        <div className="flex items-center justify-between border-b border-gray-200 px-4 py-3">
-          <div>
-            <h2 className="font-semibold text-gray-900">
-              Leads
-            </h2>
+      <div className="rounded-xl border border-gray-200 bg-white shadow-sm">
 
-            <p className="text-xs text-gray-500">
-              Mostrando {filteredLeads.length} de {leads.length}
-            </p>
-          </div>
+        <div className="border-b border-gray-200 px-5 py-4">
+          <h2 className="text-lg font-semibold text-gray-900">
+            Leads
+          </h2>
+
+          <p className="mt-1 text-sm text-gray-500">
+            Mostrando {filteredLeads.length} de {leads.length}
+          </p>
         </div>
 
         {loading ? (
@@ -277,70 +482,110 @@ export default function CRMPage() {
             Cargando leads...
           </div>
         ) : filteredLeads.length === 0 ? (
-          <div className="p-10 text-center">
-            <div className="mb-2 text-4xl">📭</div>
-
-            <p className="font-medium text-gray-700">
-              No hay leads para mostrar
-            </p>
-
-            <p className="mt-1 text-sm text-gray-500">
-              Probá cambiando los filtros de búsqueda.
-            </p>
+          <div className="p-10 text-center text-sm text-gray-500">
+            No se encontraron leads.
           </div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[1000px] text-left text-sm">
+            <table className="w-full min-w-[1000px] text-left">
+
               <thead className="bg-gray-50 text-xs uppercase text-gray-500">
                 <tr>
-                  <th className="px-4 py-3">Lead</th>
-                  <th className="px-4 py-3">Ubicación</th>
-                  <th className="px-4 py-3">Contacto</th>
-                  <th className="px-4 py-3">Score</th>
-                  <th className="px-4 py-3">Prioridad</th>
-                  <th className="px-4 py-3">Estado</th>
-                  <th className="px-4 py-3">Fecha</th>
-                  <th className="px-4 py-3 text-right">Acciones</th>
+                  <th className="px-5 py-3">
+                    Lead
+                  </th>
+
+                  <th className="px-5 py-3">
+                    Categoría
+                  </th>
+
+                  <th className="px-5 py-3">
+                    Ubicación
+                  </th>
+
+                  <th className="px-5 py-3">
+                    Contacto
+                  </th>
+
+                  <th className="px-5 py-3">
+                    Score
+                  </th>
+
+                  <th className="px-5 py-3">
+                    Prioridad
+                  </th>
+
+                  <th className="px-5 py-3">
+                    Estado
+                  </th>
+
+                  <th className="px-5 py-3">
+                    Fecha
+                  </th>
+
+                  <th className="px-5 py-3 text-right">
+                    Acciones
+                  </th>
                 </tr>
               </thead>
 
               <tbody className="divide-y divide-gray-100">
+
                 {filteredLeads.map((lead) => (
                   <tr
                     key={lead.id}
                     className="transition hover:bg-gray-50"
                   >
+
                     {/* LEAD */}
-                    <td className="px-4 py-4">
-                      <div className="flex items-start gap-2">
+                    <td className="px-5 py-4">
+                      <div className="flex items-center gap-3">
+
                         <button
+                          type="button"
+                          onClick={() =>
+                            toggleFavorite(lead)
+                          }
+                          disabled={saving}
                           title={
                             lead.favorite
                               ? "Quitar de favoritos"
                               : "Agregar a favoritos"
                           }
-                          className="text-lg"
+                          className="text-xl transition hover:scale-110 disabled:opacity-50"
                         >
-                          {lead.favorite ? "⭐" : "☆"}
+                          {lead.favorite ? "★" : "☆"}
                         </button>
 
-                        <div>
-                          <div className="font-semibold text-gray-900">
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setSelectedLead(lead)
+                          }
+                          className="text-left"
+                        >
+                          <div className="font-semibold text-gray-900 hover:text-blue-600">
                             {lead.name}
                           </div>
 
-                          {lead.category && (
+                          {lead.email && (
                             <div className="mt-1 text-xs text-gray-500">
-                              {lead.category}
+                              {lead.email}
                             </div>
                           )}
-                        </div>
+                        </button>
+
                       </div>
                     </td>
 
+                    {/* CATEGORÍA */}
+                    <td className="px-5 py-4 text-sm text-gray-700">
+                      {lead.category || "-"}
+                    </td>
+
                     {/* UBICACIÓN */}
-                    <td className="px-4 py-4">
-                      <div className="text-gray-800">
+                    <td className="px-5 py-4">
+                      <div className="text-sm font-medium text-gray-800">
                         {lead.city || "-"}
                       </div>
 
@@ -352,96 +597,116 @@ export default function CRMPage() {
                     </td>
 
                     {/* CONTACTO */}
-                    <td className="px-4 py-4">
+                    <td className="px-5 py-4">
                       {lead.phone ? (
-                        <div className="font-medium text-gray-800">
+                        <a
+                          href={`tel:${lead.phone}`}
+                          className="text-sm font-semibold text-blue-600 hover:underline"
+                        >
                           {lead.phone}
-                        </div>
+                        </a>
                       ) : (
-                        <div className="text-gray-400">
-                          Sin teléfono
-                        </div>
-                      )}
-
-                      {lead.email && (
-                        <div className="mt-1 max-w-[220px] truncate text-xs text-gray-500">
-                          {lead.email}
-                        </div>
-                      )}
-                    </td>
-
-                    {/* SCORE */}
-                    <td className="px-4 py-4">
-                      <span className="font-bold text-gray-900">
-                        {lead.score ?? "-"}
-                      </span>
-
-                      {lead.score !== null && (
-                        <span className="text-xs text-gray-400">
-                          /100
+                        <span className="text-sm text-gray-400">
+                          -
                         </span>
                       )}
                     </td>
 
+                    {/* SCORE */}
+                    <td className="px-5 py-4">
+                      <div className="font-bold text-gray-900">
+                        {lead.score ?? "-"}
+                        {lead.score !== null && (
+                          <span className="font-normal text-gray-400">
+                            /100
+                          </span>
+                        )}
+                      </div>
+                    </td>
+
                     {/* PRIORIDAD */}
-                    <td className="px-4 py-4">
+                    <td className="px-5 py-4">
                       <span
-                        className={`rounded-full px-2.5 py-1 text-xs font-semibold ${priorityClass(
+                        className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${priorityClass(
                           lead.priority
                         )}`}
                       >
-                        {lead.priority || "SIN DEFINIR"}
+                        {lead.priority || "SIN PRIORIDAD"}
                       </span>
                     </td>
 
                     {/* ESTADO */}
-                    <td className="px-4 py-4">
-                      <span
-                        className={
-                          lead.contacted
-                            ? "text-green-600"
-                            : "text-gray-500"
+                    <td className="px-5 py-4">
+                      <button
+                        type="button"
+                        onClick={() =>
+                          toggleContacted(lead)
                         }
+                        disabled={saving}
+                        className={`rounded-full px-3 py-1 text-xs font-semibold transition ${
+                          lead.contacted
+                            ? "bg-green-100 text-green-700 hover:bg-green-200"
+                            : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                        }`}
                       >
                         {lead.contacted
-                          ? "✓ Contactado"
-                          : "○ Pendiente"}
-                      </span>
+                          ? "Contactado"
+                          : "No contactado"}
+                      </button>
                     </td>
 
                     {/* FECHA */}
-                    <td className="px-4 py-4 text-gray-500">
+                    <td className="px-5 py-4 text-sm text-gray-500">
                       {formatDate(lead.createdAt)}
                     </td>
 
                     {/* ACCIONES */}
-                    <td className="px-4 py-4 text-right">
-                      <button
-                        onClick={() => setSelectedLead(lead)}
-                        className="rounded-lg border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-100"
-                      >
-                        Ver
-                      </button>
+                    <td className="px-5 py-4">
+                      <div className="flex justify-end gap-2">
+
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setSelectedLead(lead)
+                          }
+                          className="rounded-lg border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-100"
+                        >
+                          Ver
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() =>
+                            deleteLead(lead)
+                          }
+                          disabled={saving}
+                          className="rounded-lg border border-red-200 px-3 py-1.5 text-xs font-medium text-red-600 hover:bg-red-50 disabled:opacity-50"
+                        >
+                          Eliminar
+                        </button>
+
+                      </div>
                     </td>
+
                   </tr>
                 ))}
+
               </tbody>
+
             </table>
           </div>
         )}
+
       </div>
 
-      {/* MODAL DETALLE */}
+      {/* PANEL DETALLE */}
       {selectedLead && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
-          onClick={() => setSelectedLead(null)}
-        >
-          <div
-            className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-xl bg-white shadow-xl"
-            onClick={(event) => event.stopPropagation()}
-          >
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+
+          <div className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-2xl bg-white shadow-2xl">
+
             <div className="flex items-center justify-between border-b border-gray-200 px-6 py-4">
+
               <div>
                 <h2 className="text-xl font-bold text-gray-900">
                   {selectedLead.name}
@@ -453,40 +718,32 @@ export default function CRMPage() {
               </div>
 
               <button
-                onClick={() => setSelectedLead(null)}
-                className="rounded-lg px-3 py-2 text-gray-500 hover:bg-gray-100"
+                type="button"
+                onClick={() =>
+                  setSelectedLead(null)
+                }
+                className="rounded-lg px-3 py-2 text-xl text-gray-500 hover:bg-gray-100"
               >
-                ✕
+                ×
               </button>
+
             </div>
 
-            <div className="grid grid-cols-1 gap-5 p-6 md:grid-cols-2">
+            <div className="grid grid-cols-1 gap-5 p-6 sm:grid-cols-2">
+
               <DetailItem
-                label="Rubro"
+                label="Categoría"
                 value={selectedLead.category}
               />
 
               <DetailItem
-                label="Score"
-                value={
-                  selectedLead.score !== null
-                    ? `${selectedLead.score}/100`
-                    : null
-                }
+                label="Teléfono"
+                value={selectedLead.phone}
               />
 
               <DetailItem
-                label="Prioridad"
-                value={selectedLead.priority}
-              />
-
-              <DetailItem
-                label="Estado"
-                value={
-                  selectedLead.contacted
-                    ? "Contactado"
-                    : "No contactado"
-                }
+                label="Email"
+                value={selectedLead.email}
               />
 
               <DetailItem
@@ -505,28 +762,17 @@ export default function CRMPage() {
               />
 
               <DetailItem
-                label="Teléfono"
-                value={selectedLead.phone}
+                label="Score"
+                value={
+                  selectedLead.score !== null
+                    ? `${selectedLead.score}/100`
+                    : null
+                }
               />
 
               <DetailItem
-                label="Email"
-                value={selectedLead.email}
-              />
-
-              <DetailItem
-                label="Website"
-                value={selectedLead.website}
-              />
-
-              <DetailItem
-                label="Facebook"
-                value={selectedLead.facebook}
-              />
-
-              <DetailItem
-                label="Instagram"
-                value={selectedLead.instagram}
+                label="Prioridad"
+                value={selectedLead.priority}
               />
 
               <DetailItem
@@ -535,32 +781,96 @@ export default function CRMPage() {
               />
 
               <DetailItem
-                label="Fecha de creación"
+                label="Fecha"
                 value={formatDate(selectedLead.createdAt)}
               />
 
-              <div className="md:col-span-2">
-                <div className="mb-1 text-xs font-medium uppercase text-gray-400">
+              <div className="sm:col-span-2">
+                <label className="mb-2 block text-xs font-medium uppercase text-gray-400">
                   Notas
-                </div>
+                </label>
 
-                <div className="rounded-lg bg-gray-50 p-3 text-sm text-gray-700">
-                  {selectedLead.notes || "Sin notas"}
-                </div>
+                <textarea
+                  value={selectedLead.notes || ""}
+                  onChange={(event) => {
+                    const value = event.target.value;
+
+                    setSelectedLead((current) =>
+                      current
+                        ? {
+                            ...current,
+                            notes: value,
+                          }
+                        : current
+                    );
+                  }}
+                  rows={4}
+                  placeholder="Agregar notas..."
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-gray-500 focus:ring-2 focus:ring-gray-200"
+                />
+
+                <button
+                  type="button"
+                  disabled={saving}
+                  onClick={() =>
+                    updateLead(selectedLead.id, {
+                      notes: selectedLead.notes,
+                    })
+                  }
+                  className="mt-3 rounded-lg bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-700 disabled:opacity-50"
+                >
+                  {saving ? "Guardando..." : "Guardar notas"}
+                </button>
               </div>
+
             </div>
 
-            <div className="flex justify-end border-t border-gray-200 px-6 py-4">
+            <div className="flex flex-wrap gap-3 border-t border-gray-200 px-6 py-4">
+
               <button
-                onClick={() => setSelectedLead(null)}
-                className="rounded-lg bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-700"
+                type="button"
+                disabled={saving}
+                onClick={() =>
+                  toggleFavorite(selectedLead)
+                }
+                className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium hover:bg-gray-100 disabled:opacity-50"
               >
-                Cerrar
+                {selectedLead.favorite
+                  ? "★ Quitar favorito"
+                  : "☆ Agregar favorito"}
               </button>
+
+              <button
+                type="button"
+                disabled={saving}
+                onClick={() =>
+                  toggleContacted(selectedLead)
+                }
+                className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium hover:bg-gray-100 disabled:opacity-50"
+              >
+                {selectedLead.contacted
+                  ? "Marcar no contactado"
+                  : "✓ Marcar contactado"}
+              </button>
+
+              <button
+                type="button"
+                disabled={saving}
+                onClick={() =>
+                  deleteLead(selectedLead)
+                }
+                className="rounded-lg border border-red-200 px-4 py-2 text-sm font-medium text-red-600 hover:bg-red-50 disabled:opacity-50"
+              >
+                Eliminar lead
+              </button>
+
             </div>
+
           </div>
+
         </div>
       )}
+
     </div>
   );
 }
@@ -576,17 +886,25 @@ function StatCard({
 }) {
   return (
     <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
+
       <div className="flex items-center justify-between">
+
         <div>
-          <p className="text-sm text-gray-500">{title}</p>
+          <p className="text-sm text-gray-500">
+            {title}
+          </p>
 
           <p className="mt-2 text-3xl font-bold text-gray-900">
             {value}
           </p>
         </div>
 
-        <div className="text-2xl">{icon}</div>
+        <div className="text-2xl">
+          {icon}
+        </div>
+
       </div>
+
     </div>
   );
 }
@@ -604,7 +922,7 @@ function DetailItem({
         {label}
       </div>
 
-      <div className="break-words text-sm font-medium text-gray-800">
+      <div className="wrap-break-word text-sm font-medium text-gray-800">
         {value || "-"}
       </div>
     </div>
