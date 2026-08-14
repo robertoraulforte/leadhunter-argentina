@@ -520,18 +520,18 @@ export default function CRMPage() {
 
       if (!response.ok || !data.success) {
         throw new Error(
-          data.error || "No se pudo cerrar la sesi�n."
+          data.error || "No se pudo cerrar la sesión."
         );
       }
 
       window.location.href = "/crm/login";
     } catch (err) {
-      console.error("[CRM] Error cerrando sesi�n:", err);
+      console.error("[CRM] Error cerrando sesión:", err);
 
       setError(
         err instanceof Error
           ? err.message
-          : "No se pudo cerrar la sesi�n."
+          : "No se pudo cerrar la sesión."
       );
     }
   }
@@ -1728,6 +1728,7 @@ function DetailItem({
     </div>
   );
 }
+
 
 
 
