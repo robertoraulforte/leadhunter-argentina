@@ -1,7 +1,32 @@
 ﻿import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { isCrmAuthenticated } from "@/lib/crm-auth";
+
+async function requireApiCrmAuth() {
+    const authenticated = await isCrmAuthenticated();
+
+    if (!authenticated) {
+        return NextResponse.json(
+            {
+                success: false,
+                error: "No autorizado.",
+            },
+            {
+                status: 401,
+            }
+        );
+    }
+
+    return null;
+}
 
 export async function GET() {
+    const authError = await requireApiCrmAuth();
+
+    if (authError) {
+        return authError;
+    }
+
     try {
         const leads = await prisma.lead.findMany({
             orderBy: [
@@ -35,6 +60,12 @@ export async function GET() {
 }
 
 export async function POST(request: NextRequest) {
+    const authError = await requireApiCrmAuth();
+
+    if (authError) {
+        return authError;
+    }
+
     try {
         const body = await request.json();
 
@@ -166,6 +197,12 @@ export async function POST(request: NextRequest) {
 }
 
 export async function PATCH(request: NextRequest) {
+    const authError = await requireApiCrmAuth();
+
+    if (authError) {
+        return authError;
+    }
+
     try {
         const body = await request.json();
 
@@ -381,6 +418,12 @@ export async function PATCH(request: NextRequest) {
 }
 
 export async function DELETE(request: NextRequest) {
+    const authError = await requireApiCrmAuth();
+
+    if (authError) {
+        return authError;
+    }
+
     try {
         const body = await request.json();
 
