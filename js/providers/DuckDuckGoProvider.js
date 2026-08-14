@@ -1,4 +1,4 @@
-// js/providers/DuckDuckGoProvider.js
+﻿// js/providers/DuckDuckGoProvider.js
 
 import { SearchProvider } from './SearchProvider.js';
 import { Lead } from '../models/Lead.js';
@@ -6,199 +6,600 @@ import { Lead } from '../models/Lead.js';
 const DUCKDUCKGO_ENDPOINT =
     'https://html.duckduckgo.com/html/';
 
-const MAX_RESULTS = 10;
+const MAX_RESULTS_PER_QUERY = 10;
+const MAX_TOTAL_RESULTS = 20;
+
+const IGNORED_DOMAINS = [
+    'duckduckgo.com',
+    'google.com',
+    'bing.com',
+    'yahoo.com',
+    'youtube.com',
+    'tiktok.com',
+    'twitter.com',
+    'x.com',
+    'wikipedia.org',
+    'mercadolibre.com.ar',
+    'argentina.gob.ar'
+];
+
+const DIRECTORY_DOMAINS = [
+    'firmania.com.ar',
+    'guiaurbana.com.ar',
+    'paginasamarillas.com.ar',
+    'cylex.com.ar',
+    'argentinafirmas.com',
+    'indizze.com',
+    'hotfrog.com.ar',
+    'yelp.com.ar',
+    'tripadvisor.com.ar'
+];
 
 function decodeHtml(text) {
     if (!text) return '';
 
-    return text
-        .replace(/&amp;/g, '&')
-        .replace(/&quot;/g, '"')
+    return String(text)
+        .replace(/&amp;/gi, '&')
+        .replace(/&quot;/gi, '"')
         .replace(/&#x27;/gi, "'")
-        .replace(/&#39;/g, "'")
-        .replace(/&lt;/g, '<')
-        .replace(/&gt;/g, '>')
-        .replace(/&nbsp;/g, ' ');
+        .replace(/&#39;/gi, "'")
+        .replace(/&lt;/gi, '<')
+        .replace(/&gt;/gi, '>')
+        .replace(/&nbsp;/gi, ' ')
+        .replace(/&#(\d+);/g, (_, code) =>
+            String.fromCharCode(Number(code))
+        )
+        .replace(/&#x([0-9a-f]+);/gi, (_, code) =>
+            String.fromCharCode(parseInt(code, 16))
+        );
 }
 
 function cleanText(text) {
+    if (!text) return '';
+
     return decodeHtml(
-        text
-            .replace(/<[^>]*>/g, '')
+        String(text)
+            .replace(/<script[\s\S]*?<\/script>/gi, ' ')
+            .replace(/<style[\s\S]*?<\/style>/gi, ' ')
+            .replace(/<[^>]*>/g, ' ')
             .replace(/\s+/g, ' ')
             .trim()
     );
+}
+
+function normalize(value) {
+    if (!value) return '';
+
+    return String(value)
+        .toLowerCase()
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .replace(/[^a-z0-9]+/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
 }
 
 function extractRealUrl(href) {
     if (!href) return null;
 
     try {
-        const absoluteUrl = href.startsWith('http')
-            ? href
-            : `https://html.duckduckgo.com${href}`;
+        let value = decodeHtml(href);
 
-        const url = new URL(absoluteUrl);
-
-        // DuckDuckGo utiliza enlaces de redirección
-        // con el parámetro uddg.
-        const redirectedUrl = url.searchParams.get('uddg');
-
-        if (redirectedUrl) {
-            return decodeURIComponent(redirectedUrl);
+        if (
+            value.startsWith('//')
+        ) {
+            value = `https:${value}`;
         }
 
-        return absoluteUrl;
+        if (
+            value.startsWith('/')
+        ) {
+            value =
+                `https://html.duckduckgo.com${value}`;
+        }
+
+        const url =
+            new URL(value);
+
+        const uddg =
+            url.searchParams.get('uddg');
+
+        if (uddg) {
+            return decodeURIComponent(uddg);
+        }
+
+        return url.toString();
+
     } catch {
-        return href;
+        return null;
+    }
+}
+
+function getHostname(url) {
+    if (!url) return null;
+
+    try {
+        return new URL(url)
+            .hostname
+            .toLowerCase()
+            .replace(/^www\./, '');
+
+    } catch {
+        return null;
     }
 }
 
 function isIgnoredDomain(url) {
-    if (!url) return true;
+    const hostname =
+        getHostname(url);
 
-    const ignoredDomains = [
-        'duckduckgo.com',
-        'google.com',
-        'bing.com',
-        'yahoo.com',
-        'facebook.com',
-        'instagram.com',
-        'linkedin.com',
-        'youtube.com',
-        'tiktok.com',
-        'twitter.com',
-        'x.com',
-        'tripadvisor.com',
-        'wikipedia.org',
-        'yelp.com',
-        'paginasamarillas.com.ar',
-        'argentina.gob.ar',
-        'mercadolibre.com.ar'
-    ];
+    if (!hostname) return true;
 
-    try {
-        const hostname =
-            new URL(url).hostname.toLowerCase();
-
-        return ignoredDomains.some(domain =>
+    return IGNORED_DOMAINS.some(
+        domain =>
             hostname === domain ||
             hostname.endsWith(`.${domain}`)
-        );
-    } catch {
-        return true;
-    }
+    );
 }
 
-function extractResults(html) {
-    const results = [];
+function isDirectoryDomain(url) {
+    const hostname =
+        getHostname(url);
 
-    /*
-     * DuckDuckGo HTML utiliza bloques:
-     *
-     * .result
-     * .result__a
-     * .result__snippet
-     */
+    if (!hostname) return false;
 
-    const resultRegex =
-        /<div[^>]+class="[^"]*\bresult\b[^"]*"[\s\S]*?<\/div>\s*<\/div>/gi;
-
-    const blocks =
-        html.match(resultRegex) || [];
-
-    for (const block of blocks) {
-
-        const titleMatch =
-            block.match(
-                /<a[^>]+class="[^"]*\bresult__a\b[^"]*"[^>]+href="([^"]+)"[^>]*>([\s\S]*?)<\/a>/i
-            );
-
-        if (!titleMatch) continue;
-
-        const href =
-            extractRealUrl(titleMatch[1]);
-
-        const title =
-            cleanText(titleMatch[2]);
-
-        const snippetMatch =
-            block.match(
-                /<a[^>]+class="[^"]*\bresult__snippet\b[^"]*"[^>]*>([\s\S]*?)<\/a>/i
-            ) ||
-            block.match(
-                /<div[^>]+class="[^"]*\bresult__snippet\b[^"]*"[^>]*>([\s\S]*?)<\/div>/i
-            );
-
-        const snippet =
-            snippetMatch
-                ? cleanText(snippetMatch[1])
-                : '';
-
-        if (!href || !title) continue;
-
-        if (isIgnoredDomain(href)) continue;
-
-        results.push({
-            title,
-            url: href,
-            snippet
-        });
-
-        if (results.length >= MAX_RESULTS) {
-            break;
-        }
-    }
-
-    return results;
+    return DIRECTORY_DOMAINS.some(
+        domain =>
+            hostname === domain ||
+            hostname.endsWith(`.${domain}`)
+    );
 }
 
 function detectSocialNetworks(url) {
-    const networks = {
+    const result = {
         facebook: null,
         instagram: null,
         linkedin: null
     };
 
-    if (!url) return networks;
+    if (!url) {
+        return result;
+    }
 
-    const lowerUrl =
+    const lower =
         url.toLowerCase();
 
-    if (lowerUrl.includes('facebook.com')) {
-        networks.facebook = url;
+    if (lower.includes('facebook.com')) {
+        result.facebook = url;
     }
 
-    if (lowerUrl.includes('instagram.com')) {
-        networks.instagram = url;
+    if (lower.includes('instagram.com')) {
+        result.instagram = url;
     }
 
-    if (lowerUrl.includes('linkedin.com')) {
-        networks.linkedin = url;
+    if (lower.includes('linkedin.com')) {
+        result.linkedin = url;
     }
 
-    return networks;
+    return result;
 }
 
 function normalizeBusinessName(title) {
-    if (!title) return 'Empresa';
+    let name =
+        cleanText(title);
 
-    return title
-        .replace(/\s*[-|–]\s*Google.*$/i, '')
-        .replace(/\s*[-|–]\s*Facebook.*$/i, '')
-        .replace(/\s*[-|–]\s*Instagram.*$/i, '')
-        .replace(/\s*[-|–]\s*Sitio Oficial.*$/i, '')
-        .trim();
+    if (!name) {
+        return 'Empresa';
+    }
+
+    name =
+        name
+            .replace(/\s*[-|–—]\s*Google.*$/i, '')
+            .replace(/\s*[-|–—]\s*Facebook.*$/i, '')
+            .replace(/\s*[-|–—]\s*Instagram.*$/i, '')
+            .replace(/\s*[-|–—]\s*LinkedIn.*$/i, '')
+            .replace(/\s*[-|–—]\s*Sitio Oficial.*$/i, '')
+            .replace(/\s*[-|–—]\s*Página Oficial.*$/i, '')
+            .trim();
+
+    if (name.length > 120) {
+        name =
+            name
+                .split(/\s+[|]\s+/)[0]
+                .trim();
+    }
+
+    return name || 'Empresa';
 }
 
-export class DuckDuckGoProvider extends SearchProvider {
+function isRelevantText(
+    title,
+    snippet,
+    url,
+    rubro,
+    ciudad
+) {
+    const text =
+        normalize(
+            `${title} ${snippet} ${url}`
+        );
+
+    const normalizedRubro =
+        normalize(rubro);
+
+    const normalizedCiudad =
+        normalize(ciudad);
+
+    /*
+     * Coincidencia directa.
+     */
+    if (
+        normalizedRubro &&
+        text.includes(normalizedRubro)
+    ) {
+        return true;
+    }
+
+    if (
+        normalizedCiudad &&
+        text.includes(normalizedCiudad)
+    ) {
+        return true;
+    }
+
+    /*
+     * Variantes útiles para gomerías.
+     */
+    const tireKeywords = [
+        'gomeria',
+        'gomerias',
+        'neumatico',
+        'neumaticos',
+        'cubierta',
+        'cubiertas',
+        'llanta',
+        'llantas',
+        'tire',
+        'tyres',
+        'vulcanizacion'
+    ];
+
+    if (
+        normalizedRubro.includes('gomer') ||
+        normalizedRubro.includes('neumatic') ||
+        normalizedRubro.includes('cubierta') ||
+        normalizedRubro.includes('llanta') ||
+        normalizedRubro.includes('tyre')
+    ) {
+        return tireKeywords.some(
+            keyword =>
+                text.includes(
+                    normalize(keyword)
+                )
+        );
+    }
+
+    /*
+     * Para búsquedas genéricas aceptamos
+     * rubro o ciudad.
+     */
+    return false;
+}
+
+function createResult(
+    href,
+    title,
+    snippet,
+    rubro,
+    ciudad
+) {
+    const url =
+        extractRealUrl(href);
+
+    if (!url) {
+        return null;
+    }
+
+    if (isIgnoredDomain(url)) {
+        return null;
+    }
+
+    const cleanTitle =
+        cleanText(title);
+
+    const cleanSnippet =
+        cleanText(snippet);
+
+    if (!cleanTitle) {
+        return null;
+    }
+
+    if (
+        !isRelevantText(
+            cleanTitle,
+            cleanSnippet,
+            url,
+            rubro,
+            ciudad
+        )
+    ) {
+        return null;
+    }
+
+    return {
+        title: cleanTitle,
+        url,
+        snippet: cleanSnippet,
+        domain: getHostname(url),
+        isDirectory:
+            isDirectoryDomain(url)
+    };
+}
+
+/*
+ * Parser principal.
+ *
+ * DuckDuckGo HTML puede cambiar ligeramente
+ * la estructura. Por eso buscamos enlaces
+ * result__a y no dependemos únicamente de
+ * bloques .result.
+ */
+function parseDuckDuckGoHtml(
+    html,
+    rubro,
+    ciudad
+) {
+    const results = [];
+
+    if (!html) {
+        return results;
+    }
+
+    /*
+     * 1. Parser clásico:
+     * result__a + bloque cercano.
+     */
+    const anchorRegex =
+        /<a[^>]*class=["'][^"']*result__a[^"']*["'][^>]*href=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi;
+
+    let match;
+
+    while (
+        (match = anchorRegex.exec(html)) !== null
+    ) {
+        const href =
+            match[1];
+
+        const title =
+            match[2];
+
+        const start =
+            match.index;
+
+        const context =
+            html.slice(
+                start,
+                Math.min(
+                    html.length,
+                    start + 5000
+                )
+            );
+
+        const snippetMatch =
+            context.match(
+                /class=["'][^"']*result__snippet[^"']*["'][^>]*>([\s\S]*?)(?:<\/a>|<\/div>)/i
+            );
+
+        const snippet =
+            snippetMatch
+                ? snippetMatch[1]
+                : '';
+
+        const result =
+            createResult(
+                href,
+                title,
+                snippet,
+                rubro,
+                ciudad
+            );
+
+        if (result) {
+            results.push(result);
+        }
+
+        if (
+            results.length >=
+            MAX_RESULTS_PER_QUERY
+        ) {
+            break;
+        }
+    }
+
+    if (results.length) {
+        console.log(
+            `[DuckDuckGoProvider] Parser clásico: ${results.length} resultados`
+        );
+
+        return results;
+    }
+
+    /*
+     * 2. Parser permisivo.
+     *
+     * Busca cualquier enlace HTTP/HTTPS
+     * dentro del HTML y utiliza el texto
+     * cercano como posible título.
+     */
+    console.log(
+        '[DuckDuckGoProvider] Parser clásico sin resultados. Activando parser permisivo...'
+    );
+
+    const genericAnchorRegex =
+        /<a[^>]+href=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi;
+
+    while (
+        (match =
+            genericAnchorRegex.exec(html)) !== null
+    ) {
+        const href =
+            match[1];
+
+        const inner =
+            match[2];
+
+        const title =
+            cleanText(inner);
+
+        if (!title) {
+            continue;
+        }
+
+        const result =
+            createResult(
+                href,
+                title,
+                '',
+                rubro,
+                ciudad
+            );
+
+        if (result) {
+            results.push(result);
+        }
+
+        if (
+            results.length >=
+            MAX_RESULTS_PER_QUERY
+        ) {
+            break;
+        }
+    }
+
+    console.log(
+        `[DuckDuckGoProvider] Parser permisivo: ${results.length} resultados`
+    );
+
+    return results;
+}
+
+function createResultKey(result) {
+    if (!result) return '';
+
+    const url =
+        String(result.url || '')
+            .toLowerCase()
+            .replace(/^https?:\/\//, '')
+            .replace(/^www\./, '')
+            .replace(/\/+$/, '');
+
+    const title =
+        normalize(
+            result.title
+        );
+
+    return `${url}|${title}`;
+}
+
+function deduplicateResults(results) {
+    const unique =
+        new Map();
+
+    for (const result of results) {
+        const key =
+            createResultKey(result);
+
+        if (!key) {
+            continue;
+        }
+
+        const existing =
+            unique.get(key);
+
+        if (!existing) {
+            unique.set(
+                key,
+                result
+            );
+
+            continue;
+        }
+
+        if (
+            result.snippet.length >
+            existing.snippet.length
+        ) {
+            unique.set(
+                key,
+                result
+            );
+        }
+    }
+
+    return [
+        ...unique.values()
+    ];
+}
+
+function classifyResult(result) {
+    const networks =
+        detectSocialNetworks(
+            result.url
+        );
+
+    if (networks.facebook) {
+        return 'facebook';
+    }
+
+    if (networks.instagram) {
+        return 'instagram';
+    }
+
+    if (networks.linkedin) {
+        return 'linkedin';
+    }
+
+    if (result.isDirectory) {
+        return 'directory';
+    }
+
+    return 'website';
+}
+
+function priority(result) {
+    switch (
+        classifyResult(result)
+    ) {
+        case 'website':
+            return 100;
+
+        case 'facebook':
+            return 80;
+
+        case 'instagram':
+            return 80;
+
+        case 'linkedin':
+            return 70;
+
+        case 'directory':
+            return 50;
+
+        default:
+            return 10;
+    }
+}
+
+export class DuckDuckGoProvider
+    extends SearchProvider {
 
     constructor() {
-        super('DuckDuckGo Search');
+        super(
+            'DuckDuckGo Search'
+        );
     }
 
     async executeSearch(query) {
-
         const url =
             `${DUCKDUCKGO_ENDPOINT}?q=` +
             encodeURIComponent(query);
@@ -218,13 +619,18 @@ export class DuckDuckGoProvider extends SearchProvider {
                             'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/131 Safari/537.36',
 
                         'Accept':
-                            'text/html,application/xhtml+xml'
+                            'text/html,application/xhtml+xml,application/xhtml;q=0.9,*/*;q=0.8',
+
+                        'Accept-Language':
+                            'es-AR,es;q=0.9,en;q=0.8'
                     },
 
                     cache: 'no-store',
 
                     signal:
-                        AbortSignal.timeout(15000)
+                        AbortSignal.timeout(
+                            15000
+                        )
                 }
             );
 
@@ -238,14 +644,15 @@ export class DuckDuckGoProvider extends SearchProvider {
     }
 
     async search(filters) {
-
         const rubro =
-            String(filters.rubro || '')
-                .trim();
+            String(
+                filters?.rubro || ''
+            ).trim();
 
         const ciudad =
-            String(filters.ciudad || '')
-                .trim();
+            String(
+                filters?.ciudad || ''
+            ).trim();
 
         if (!rubro || !ciudad) {
             return [];
@@ -264,84 +671,88 @@ export class DuckDuckGoProvider extends SearchProvider {
         const allResults = [];
 
         for (const query of queries) {
-
             try {
-
                 const html =
-                    await this.executeSearch(query);
+                    await this.executeSearch(
+                        query
+                    );
 
                 console.log(
                     `[DuckDuckGoProvider] HTML recibido: ${html.length} caracteres`
                 );
 
                 const results =
-                    extractResults(html);
+                    parseDuckDuckGoHtml(
+                        html,
+                        rubro,
+                        ciudad
+                    );
 
                 console.log(
                     `[DuckDuckGoProvider] ${results.length} resultados parseados`
                 );
 
-                allResults.push(...results);
+                allResults.push(
+                    ...results
+                );
 
             } catch (error) {
-
                 console.warn(
                     `[DuckDuckGoProvider] Error en búsqueda "${query}":`,
-                    error
+                    error?.message || error
                 );
             }
         }
 
-        /*
-         * Eliminar URLs repetidas.
-         */
         const uniqueResults =
-            new Map();
+            deduplicateResults(
+                allResults
+            );
 
-        for (const result of allResults) {
+        uniqueResults.sort(
+            (a, b) =>
+                priority(b) -
+                priority(a)
+        );
 
-            const key =
-                result.url
-                    .toLowerCase()
-                    .replace(/\/$/, '');
+        const limited =
+            uniqueResults.slice(
+                0,
+                MAX_TOTAL_RESULTS
+            );
 
-            if (!uniqueResults.has(key)) {
-                uniqueResults.set(
-                    key,
-                    result
-                );
-            }
-        }
+        console.log(
+            `[DuckDuckGoProvider] ${limited.length} resultados únicos después de filtrar`
+        );
 
         const leads = [];
 
-        for (const result of uniqueResults.values()) {
-
+        for (const result of limited) {
             const redes =
-                detectSocialNetworks(result.url);
+                detectSocialNetworks(
+                    result.url
+                );
 
             const nombre =
                 normalizeBusinessName(
                     result.title
                 );
 
-            /*
-             * No generamos datos inventados.
-             *
-             * Si DuckDuckGo solamente conoce:
-             * - nombre
-             * - sitio web
-             *
-             * dejamos teléfono/email en null.
-             */
+            const tipo =
+                classifyResult(result);
 
-            leads.push(
+            const website =
+                tipo === 'website'
+                    ? result.url
+                    : null;
+
+            const lead =
                 new Lead({
-
                     nombre,
 
                     provincia:
-                        filters.provincia !== 'todas'
+                        filters.provincia !==
+                        'todas'
                             ? filters.provincia
                             : 'Buenos Aires',
 
@@ -358,11 +769,7 @@ export class DuckDuckGoProvider extends SearchProvider {
                     whatsapp:
                         null,
 
-                    website:
-                        redes.facebook ||
-                        redes.instagram
-                            ? null
-                            : result.url,
+                    website,
 
                     redes,
 
@@ -372,7 +779,22 @@ export class DuckDuckGoProvider extends SearchProvider {
 
                     coordenadas:
                         null
-                })
+                });
+
+            lead.fuenteTipo =
+                tipo;
+
+            lead.fuenteUrl =
+                result.url;
+
+            lead.fuenteSnippet =
+                result.snippet;
+
+            lead.fuenteDominio =
+                result.domain;
+
+            leads.push(
+                lead
             );
         }
 
