@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 
@@ -510,6 +510,31 @@ export default function CRMPage() {
     }
   }
 
+  async function handleLogout() {
+    try {
+      const response = await fetch("/api/crm/logout", {
+        method: "POST",
+      });
+
+      const data = await response.json();
+
+      if (!response.ok || !data.success) {
+        throw new Error(
+          data.error || "No se pudo cerrar la sesi�n."
+        );
+      }
+
+      window.location.href = "/crm/login";
+    } catch (err) {
+      console.error("[CRM] Error cerrando sesi�n:", err);
+
+      setError(
+        err instanceof Error
+          ? err.message
+          : "No se pudo cerrar la sesi�n."
+      );
+    }
+  }
   const pageClasses = darkMode
     ? "min-h-screen bg-gray-950 text-gray-100 p-6"
     : "min-h-screen bg-gray-50 text-gray-900 p-6";
@@ -570,6 +595,19 @@ export default function CRMPage() {
               : "🌙 Modo dark"}
           </button>
 
+          {/* LOGOUT */}
+          <button
+            type="button"
+            onClick={() => void handleLogout()}
+            disabled={saving || loading}
+            className={
+              darkMode
+                ? "rounded-lg border border-red-900 bg-gray-900 px-4 py-2 text-sm font-medium text-red-400 transition hover:bg-red-950 disabled:cursor-not-allowed disabled:opacity-50"
+                : "rounded-lg border border-red-200 bg-white px-4 py-2 text-sm font-medium text-red-600 transition hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50"
+            }
+          >
+            Cerrar sesión
+          </button>
           {/* REFRESH */}
           <button
             type="button"
@@ -1690,3 +1728,6 @@ function DetailItem({
     </div>
   );
 }
+
+
+
