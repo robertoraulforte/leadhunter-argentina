@@ -15,7 +15,7 @@ const NOMINATIM_ENDPOINT =
 const GOMERIA_RADIUS = 15000;
 const GENERIC_RADIUS = 10000;
 
-const TIMEOUT_MS = 10000;
+const TIMEOUT_MS = 3000;
 
 function clean(value) {
     if (value === undefined || value === null) {
@@ -439,42 +439,36 @@ async function queryOverpass(
  */
 async function executeQuery(query) {
 
-    for (
-        let i = 0;
-        i < OVERPASS_ENDPOINTS.length;
-        i++
-    ) {
-        try {
+    const endpoint = OVERPASS_ENDPOINTS[0];
 
-            const data =
-                await queryOverpass(
-                    OVERPASS_ENDPOINTS[i],
-                    query
-                );
+    try {
 
-            console.log(
-                `[OverpassProvider] Consulta OK ` +
-                `en servidor ${i + 1}`
+        const data =
+            await queryOverpass(
+                endpoint,
+                query
             );
 
-            return data;
+        console.log(
+            "[OverpassProvider] Consulta OK en servidor principal"
+        );
 
-        } catch (error) {
+        return data;
 
-            console.warn(
-                `[OverpassProvider] Servidor ${i + 1} falló:`,
-                error?.message || error
-            );
-        }
+    } catch (error) {
+
+        console.warn(
+            "[OverpassProvider] Servidor principal fallo:",
+            error?.message || error
+        );
+
+        console.warn(
+            "[OverpassProvider] Se omite Overpass para esta consulta."
+        );
+
+        return null;
     }
-
-    console.warn(
-        '[OverpassProvider] Ningún servidor respondió esta consulta.'
-    );
-
-    return null;
 }
-
 function elementToLead(
     element,
     filters,
