@@ -1,4 +1,4 @@
-﻿// js/providers/DuckDuckGoProvider.js
+// js/providers/DuckDuckGoProvider.js
 
 import { SearchProvider } from './SearchProvider.js';
 import { Lead } from '../models/Lead.js';
@@ -356,133 +356,163 @@ function parseDuckDuckGoHtml(
     }
 
     /*
-     * 1. Parser clásico:
-     * result__a + bloque cercano.
+     * DuckDuckGo puede cambiar las clases HTML.
+     * Primero intentamos el formato clásico.
      */
-    const anchorRegex =
-        /<a[^>]*class=["'][^"']*result__a[^"']*["'][^>]*href=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi;
+    const patterns = [
+        /<a[^>]*class=["'][^"']*result__a[^"']*["'][^>]*href=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi,
+        /<a[^>]*href=["']([^"']+)["'][^>]*class=["'][^"']*result__a[^"']*["'][^>]*>([\s\S]*?)<\/a>/gi
+    ];
 
-    let match;
+    for (const anchorRegex of patterns) {
+        let match;
 
-    while (
-        (match = anchorRegex.exec(html)) !== null
-    ) {
-        const href =
-            match[1];
+        while (
+            (match = anchorRegex.exec(html)) !== null
+        ) {
+            const href = match[1];
+            const title = match[2];
 
-        const title =
-            match[2];
-
-        const start =
-            match.index;
-
-        const context =
-            html.slice(
-                start,
+            const context = html.slice(
+                match.index,
                 Math.min(
                     html.length,
-                    start + 5000
+                    match.index + 5000
                 )
             );
 
-        const snippetMatch =
-            context.match(
-                /class=["'][^"']*result__snippet[^"']*["'][^>]*>([\s\S]*?)(?:<\/a>|<\/div>)/i
-            );
+            const snippetMatch =
+                context.match(
+                    /class=["'][^"']*result__snippet[^"']*["'][^>]*>([\s\S]*?)(?:<\/a>|<\/div>)/i
+                );
 
-        const snippet =
-            snippetMatch
-                ? snippetMatch[1]
-                : '';
+            const snippet =
+                snippetMatch
+                    ? snippetMatch[1]
+                    : '';
 
-        const result =
-            createResult(
-                href,
-                title,
-                snippet,
-                rubro,
-                ciudad
-            );
+            const result =
+                createResult(
+                    href,
+                    title,
+                    snippet,
+                    rubro,
+                    ciudad
+                );
 
-        if (result) {
-            results.push(result);
+            if (result) {
+                results.push(result);
+            }
+
+            if (
+                results.length >=
+                MAX_RESULTS_PER_QUERY
+            ) {
+                return results;
+            }
         }
-
-        if (
-            results.length >=
-            MAX_RESULTS_PER_QUERY
-        ) {
-            break;
-        }
-    }
-
-    if (results.length) {
-        console.log(
-            `[DuckDuckGoProvider] Parser clásico: ${results.length} resultados`
-        );
-
-        return results;
     }
 
     /*
-     * 2. Parser permisivo.
-     *
-     * Busca cualquier enlace HTTP/HTTPS
-     * dentro del HTML y utiliza el texto
-     * cercano como posible título.
+     * Parser alternativo:
+     * busca enlaces externos y toma el texto
+     * del enlace como nombre potencial.
      */
-    console.log(
-        '[DuckDuckGoProvider] Parser clásico sin resultados. Activando parser permisivo...'
-    );
+    if (!results.length) {
+        console.log(
+            '[DuckDuckGoProvider] Parser clásico sin resultados. Activando parser alternativo...'
+        );
 
-    const genericAnchorRegex =
-        /<a[^>]+href=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi;
+        const genericAnchorRegex =
+            /<a[^>]+href=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi;
 
-    while (
-        (match =
-            genericAnchorRegex.exec(html)) !== null
-    ) {
-        const href =
-            match[1];
+        let match;
 
-        const inner =
-            match[2];
-
-        const title =
-            cleanText(inner);
-
-        if (!title) {
-            continue;
-        }
-
-        const result =
-            createResult(
-                href,
-                title,
-                '',
-                rubro,
-                ciudad
-            );
-
-        if (result) {
-            results.push(result);
-        }
-
-        if (
-            results.length >=
-            MAX_RESULTS_PER_QUERY
+        while (
+            (match =
+                genericAnchorRegex.exec(html)) !== null
         ) {
-            break;
+            const href = match[1];
+            const title = cleanText(match[2]);
+
+            if (!title) {
+                continue;
+            }
+
+            const result =
+                createResult(
+                    href,
+                    title,
+                    '',
+                    rubro,
+                    ciudad
+                );
+
+            if (result) {
+                results.push(result);
+            }
+
+            if (
+                results.length >=
+                MAX_RESULTS_PER_QUERY
+            ) {
+                break;
+            }
+        }
+    }
+
+    /*
+     * Último intento:
+     * extraer URLs visibles del HTML aunque DuckDuckGo
+     * haya cambiado completamente las clases.
+     */
+    if (!results.length) {
+        console.log(
+            '[DuckDuckGoProvider] Parser de enlaces sin resultados. Buscando URLs externas...'
+        );
+
+        const urlRegex =
+            /https?:\/\/[^\s"'<>]+/gi;
+
+        const urls =
+            html.match(urlRegex) || [];
+
+        for (const rawUrl of urls) {
+            const url =
+                rawUrl
+                    .replace(
+                        /[),.;]+$/,
+                        ''
+                    );
+
+            const result =
+                createResult(
+                    url,
+                    url,
+                    '',
+                    rubro,
+                    ciudad
+                );
+
+            if (result) {
+                results.push(result);
+            }
+
+            if (
+                results.length >=
+                MAX_RESULTS_PER_QUERY
+            ) {
+                break;
+            }
         }
     }
 
     console.log(
-        `[DuckDuckGoProvider] Parser permisivo: ${results.length} resultados`
+        `[DuckDuckGoProvider] Parser final: ${results.length} resultados`
     );
 
     return results;
 }
-
 function createResultKey(result) {
     if (!result) return '';
 
