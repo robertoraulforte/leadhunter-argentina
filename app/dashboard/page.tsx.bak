@@ -1,6 +1,6 @@
 ﻿'use client';
 
-import { useRef, useState, type FormEvent } from 'react';
+import { useState, type FormEvent } from 'react';
 
 interface LeadResult {
   id: string;
@@ -69,22 +69,12 @@ export default function BuscadorLeads() {
   const [searched, setSearched] = useState(false);
 
   const [savingId, setSavingId] = useState<string | null>(null);
-
-  // Leads que ya fueron guardados correctamente durante esta búsqueda.
-  const [savedLeadIds, setSavedLeadIds] = useState<Set<string>>(
-    () => new Set()
-  );
-
-  // Ref para bloquear inmediatamente dobles clics antes de que React
-  // llegue a actualizar el estado.
-  const savingLeadIdsRef = useRef<Set<string>>(new Set());
-
   const [manualLead, setManualLead] =
     useState<ManualLeadForm>(initialManualLead);
   const [savingManual, setSavingManual] = useState(false);
 
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
-
+  const [successLeadId, setSuccessLeadId] = useState<string | null>(null);
 
   const handleSearch = async (e: FormEvent) => {
     e.preventDefault();
@@ -97,11 +87,7 @@ export default function BuscadorLeads() {
     setLoading(true);
     setSearched(true);
     setSuccessMessage(null);
-    
-
-    // Los resultados de una nueva búsqueda empiezan sin leads guardados.
-    setSavedLeadIds(new Set());
-    savingLeadIdsRef.current.clear();
+    setSuccessLeadId(null);
 
     try {
       const res = await fetch(
@@ -125,21 +111,9 @@ export default function BuscadorLeads() {
   };
 
   const handleSaveLead = async (lead: LeadResult) => {
-    // Protección contra doble clic mientras se está guardando
-    // o si el lead ya fue guardado.
-    if (
-      savingLeadIdsRef.current.has(lead.id) ||
-      savedLeadIds.has(lead.id)
-    ) {
-      return;
-    }
-
-    // Bloqueo inmediato. No depende de que React actualice el estado.
-    savingLeadIdsRef.current.add(lead.id);
-
     setSavingId(lead.id);
     setSuccessMessage(null);
-    
+    setSuccessLeadId(null);
 
     try {
       const res = await fetch('/api/leads', {
@@ -163,23 +137,18 @@ export default function BuscadorLeads() {
       const data = await res.json();
 
       if (data.success) {
-        // Marcamos el resultado de búsqueda como guardado.
-        setSavedLeadIds((current) => {
-          const next = new Set(current);
-          next.add(lead.id);
-          return next;
-        });
-
         setSuccessMessage(
           `Lead "${lead.nombre}" creado correctamente.`
         );
-
-       
+        setSuccessLeadId(data.result?.id ?? null);
+      } else {
+        alert(
+          `Error al guardar: ${
+            data.error || 'Intentá nuevamente.'
+          }`
+        );
       }
     } catch (err) {
-      // Si hubo error de conexión, permitimos volver a intentar.
-      savingLeadIdsRef.current.delete(lead.id);
-
       console.error('Error al guardar lead:', err);
       alert('Error de conexión al guardar el lead.');
     } finally {
@@ -207,7 +176,7 @@ export default function BuscadorLeads() {
 
     setSavingManual(true);
     setSuccessMessage(null);
-    
+    setSuccessLeadId(null);
 
     try {
       const res = await fetch('/api/leads', {
@@ -224,7 +193,7 @@ export default function BuscadorLeads() {
         setSuccessMessage(
           `Lead "${manualLead.name}" creado correctamente.`
         );
-        
+        setSuccessLeadId(data.result?.id ?? null);
         setManualLead(initialManualLead);
       } else {
         alert(
@@ -395,87 +364,71 @@ export default function BuscadorLeads() {
             ) : leads.length > 0 ? (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
 
-                {leads.map((lead) => {
-                  const isSaving = savingId === lead.id;
-                  const isSaved = savedLeadIds.has(lead.id);
+                {leads.map((lead) => (
+                  <div
+                    key={lead.id}
+                    className="bg-slate-900 border border-slate-800 rounded-xl p-5 flex flex-col justify-between hover:border-blue-500 transition"
+                  >
+                    <div>
+                      <div className="flex justify-between items-start mb-2 gap-3">
 
-                  return (
-                    <div
-                      key={lead.id}
-                      className={`bg-slate-900 border rounded-xl p-5 flex flex-col justify-between transition ${
-                        isSaved
-                          ? 'border-emerald-800'
-                          : 'border-slate-800 hover:border-blue-500'
-                      }`}
-                    >
-                      <div>
-                        <div className="flex justify-between items-start mb-2 gap-3">
+                        <h4 className="font-bold text-white text-lg">
+                          {lead.nombre}
+                        </h4>
 
-                          <h4 className="font-bold text-white text-lg">
-                            {lead.nombre}
-                          </h4>
+                        <span
+                          className={`shrink-0 text-xs font-semibold px-2.5 py-1 rounded-full border ${
+                            lead.scoreIA >= 80
+                              ? 'bg-emerald-950 text-emerald-300 border-emerald-800'
+                              : 'bg-amber-950 text-amber-300 border-amber-800'
+                          }`}
+                        >
+                          Score: {lead.scoreIA}%
+                        </span>
 
-                          <span
-                            className={`shrink-0 text-xs font-semibold px-2.5 py-1 rounded-full border ${
-                              lead.scoreIA >= 80
-                                ? 'bg-emerald-950 text-emerald-300 border-emerald-800'
-                                : 'bg-amber-950 text-amber-300 border-amber-800'
-                            }`}
-                          >
-                            Score: {lead.scoreIA}%
-                          </span>
-
-                        </div>
-
-                        <p className="text-sm text-slate-400 mb-1">
-                          📍 {lead.ciudad}, {lead.provincia}
-                        </p>
-
-                        <p className="text-sm text-slate-300 mb-1">
-                          ✉️ {lead.email || 'No disponible'}
-                        </p>
-
-                        <p className="text-sm text-slate-300 mb-3">
-                          📞 {lead.telefono || 'No disponible'}
-                        </p>
-
-                        <div className="mb-4">
-                          <span className="text-xs text-slate-500 block mb-1">
-                            Fuentes:
-                          </span>
-
-                          <div className="flex flex-wrap gap-1">
-                            {lead.fuentes.map((fuente, index) => (
-                              <span
-                                key={index}
-                                className="text-xs bg-slate-800 text-slate-300 px-2 py-0.5 rounded border border-slate-700"
-                              >
-                                {fuente}
-                              </span>
-                            ))}
-                          </div>
-                        </div>
                       </div>
 
-                      <button
-                        type="button"
-                        onClick={() => handleSaveLead(lead)}
-                        disabled={isSaving || isSaved}
-                        className={`w-full py-2 rounded-lg text-sm font-medium transition border ${
-                          isSaved
-                            ? 'bg-emerald-950 text-emerald-300 border-emerald-800 cursor-default'
-                            : 'bg-slate-800 hover:bg-slate-700 disabled:opacity-50 text-blue-400 border-slate-700'
-                        }`}
-                      >
-                        {isSaving
-                          ? 'Guardando...'
-                          : isSaved
-                            ? '✓ Guardado'
-                            : 'Guardar lead'}
-                      </button>
+                      <p className="text-sm text-slate-400 mb-1">
+                        📍 {lead.ciudad}, {lead.provincia}
+                      </p>
+
+                      <p className="text-sm text-slate-300 mb-1">
+                        ✉️ {lead.email || 'No disponible'}
+                      </p>
+
+                      <p className="text-sm text-slate-300 mb-3">
+                        📞 {lead.telefono || 'No disponible'}
+                      </p>
+
+                      <div className="mb-4">
+                        <span className="text-xs text-slate-500 block mb-1">
+                          Fuentes:
+                        </span>
+
+                        <div className="flex flex-wrap gap-1">
+                          {lead.fuentes.map((fuente, index) => (
+                            <span
+                              key={index}
+                              className="text-xs bg-slate-800 text-slate-300 px-2 py-0.5 rounded border border-slate-700"
+                            >
+                              {fuente}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
                     </div>
-                  );
-                })}
+
+                    <button
+                      onClick={() => handleSaveLead(lead)}
+                      disabled={savingId === lead.id}
+                      className="w-full bg-slate-800 hover:bg-slate-700 disabled:opacity-50 text-blue-400 border border-slate-700 py-2 rounded-lg text-sm font-medium transition"
+                    >
+                      {savingId === lead.id
+                        ? 'Guardando...'
+                        : 'Guardar lead'}
+                    </button>
+                  </div>
+                ))}
 
               </div>
             ) : searched ? (

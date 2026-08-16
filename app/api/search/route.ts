@@ -1,243 +1,183 @@
-import { NextRequest, NextResponse } from "next/server";
+﻿import { NextRequest, NextResponse } from "next/server";
 
 import { SearchService } from "@/js/services/SearchService";
+import { OverpassProvider } from "@/js/providers/OverpassProvider";
 import { DeduplicatorService } from "@/js/services/DeduplicatorService";
 import { ScoringService } from "@/js/services/ScoringService";
-import { LeadEnricherService } from "@/js/services/LeadEnricherService";
-
-import { OverpassProvider } from "@/js/providers/OverpassProvider";
-import { DuckDuckGoProvider } from "@/js/providers/DuckDuckGoProvider";
 
 export async function GET(request: NextRequest) {
-    const totalStart = performance.now();
+  const startTime = Date.now();
 
+  try {
     const { searchParams } = new URL(request.url);
 
-    const rubro = searchParams.get("rubro");
-    const ciudad = searchParams.get("ciudad");
+    const rubro = searchParams.get("rubro")?.trim() || "";
+    const ciudad = searchParams.get("ciudad")?.trim() || "";
     const provincia =
-        searchParams.get("provincia") || "todas";
-
-    const tamano =
-        searchParams.get("tamano") || "todos";
-
-    const necesidad =
-        searchParams.get("necesidad") || "cualquiera";
+      searchParams.get("provincia")?.trim() || "todas";
 
     if (!rubro || !ciudad) {
-        return NextResponse.json(
-            {
-                success: false,
-                error: "Debe indicar rubro y ciudad."
-            },
-            {
-                status: 400
-            }
-        );
+      return NextResponse.json(
+        {
+          success: false,
+          error: "El rubro y la ciudad son obligatorios.",
+        },
+        { status: 400 }
+      );
     }
 
-    try {
-        /*
-         * ========================================
-         * FASE 1
-         * BÚSQUEDA MULTIPROVEEDOR
-         * ========================================
-         */
+    const filters = {
+      rubro,
+      ciudad,
+      provincia,
+    };
 
-        const searchStart = performance.now();
+    console.log(
+      `[API Search] Buscando "${rubro}" en "${ciudad}"`
+    );
 
-        const searchService =
-            new SearchService();
+    /*
+     * =========================================================
+     * SEARCH SERVICE
+     * =========================================================
+     *
+     * DuckDuckGo queda desactivado temporalmente.
+     *
+     * Por ahora utilizamos solamente Overpass.
+     */
 
-        searchService.registerProvider(
-            new OverpassProvider()
-        );
+    const searchService = new SearchService();
 
-        searchService.registerProvider(
-            new DuckDuckGoProvider()
-        );
+    searchService.registerProvider(
+      new OverpassProvider()
+    );
 
-        const filters = {
-            rubro,
-            ciudad,
-            provincia,
-            tamano,
-            necesidad
-        };
+    const rawLeads =
+      await searchService.searchAll(filters);
 
-        const rawLeads =
-            await searchService.searchAll(
-                filters
-            );
+    console.log(
+      `[API Search] SearchService: ${
+        (Date.now() - startTime) / 1000
+      }s`
+    );
 
-        const searchTime =
-            performance.now() - searchStart;
+    console.log(
+      `[API Search] Leads en bruto: ${rawLeads.length}`
+    );
 
-        console.log(
-            `[API Search] SearchService: ${(searchTime / 1000).toFixed(2)}s`
-        );
+    /*
+     * =========================================================
+     * DEDUPLICACIÃ“N
+     * =========================================================
+     */
 
-        console.log(
-            `[API Search] Leads en bruto: ${rawLeads.length}`
-        );
+    const deduplicatedLeads =
+      DeduplicatorService.process(rawLeads);
 
-        /*
-         * ========================================
-         * FASE 2
-         * DEDUPLICACIÓN
-         * ========================================
-         */
+    console.log(
+      `[API Search] Leads despuÃ©s de deduplicar: ${deduplicatedLeads.length}`
+    );
 
-        const dedupStart = performance.now();
+    /*
+     * =========================================================
+     * SCORING
+     * =========================================================
+     *
+     * LeadEnricherService queda fuera temporalmente porque
+     * actualmente no expone un mÃ©todo enrich().
+     *
+     * No modificamos ese servicio.
+     */
 
-        const deduplicatedLeads =
-            DeduplicatorService.process(
-                rawLeads
-            );
+    const scoredLeads =
+      ScoringService.process(
+        deduplicatedLeads
+      );
 
-        const dedupTime =
-            performance.now() - dedupStart;
+    console.log(
+      `[API Search] Leads con scoring: ${scoredLeads.length}`
+    );
 
-        console.log(
-            `[API Search] Deduplicator: ${(dedupTime / 1000).toFixed(2)}s`
-        );
+    /*
+     * =========================================================
+     * RESPUESTA PARA EL DASHBOARD
+     * =========================================================
+     */
 
-        console.log(
-            `[API Search] Leads después de deduplicar: ${deduplicatedLeads.length}`
-        );
+    const results = scoredLeads.map((lead) => ({
+      id: lead.id,
 
-        /*
-         * ========================================
-         * FASE 3
-         * ENRIQUECIMIENTO WEB
-         * ========================================
-         */
+      nombre:
+        lead.nombre ||
+        "Empresa",
 
-        const enrichmentStart =
-            performance.now();
+      provincia:
+        lead.provincia ||
+        "",
 
-        const enrichedLeads =
-            await LeadEnricherService.process(
-                deduplicatedLeads
-            );
+      ciudad:
+        lead.ciudad ||
+        ciudad,
 
-        const enrichmentTime =
-            performance.now() - enrichmentStart;
+      rubro:
+        lead.rubro ||
+        rubro,
 
-        console.log(
-            `[API Search] Enrichment: ${(enrichmentTime / 1000).toFixed(2)}s`
-        );
+      email:
+        lead.email ||
+        null,
 
-        console.log(
-            `[API Search] Leads enriquecidos: ${enrichedLeads.length}`
-        );
+      telefono:
+        lead.telefono ||
+        null,
 
-        /*
-         * ========================================
-         * FASE 4
-         * SCORING
-         * ========================================
-         */
+      scoreIA:
+        lead.scoreIA ??
+        0,
 
-        const scoringStart =
-            performance.now();
+      prioridad:
+        lead.prioridad ||
+        "media",
 
-        const finalLeads =
-            ScoringService.process(
-                enrichedLeads
-            );
+      fuentes:
+        Array.isArray(lead.fuentes)
+          ? lead.fuentes
+          : [],
+    }));
+    console.log(
+      `[API Search] TOTAL: ${
+        (Date.now() - startTime) / 1000
+      }s`
+    );
 
-        const scoringTime =
-            performance.now() - scoringStart;
+    console.log(
+      "[API Search] ========================================"
+    );
 
-        console.log(
-            `[API Search] Scoring: ${(scoringTime / 1000).toFixed(2)}s`
-        );
+    return NextResponse.json({
+      success: true,
+      results,
+      total: results.length,
+    });
 
-        /*
-         * ========================================
-         * TIEMPO TOTAL
-         * ========================================
-         */
+  } catch (error) {
+    console.error(
+      "[API Search] Error:",
+      error
+    );
 
-        const totalTime =
-            performance.now() - totalStart;
-
-        console.log(
-            `[API Search] TOTAL: ${(totalTime / 1000).toFixed(2)}s`
-        );
-
-        console.log(
-            `[API Search] ========================================`
-        );
-
-        /*
-         * ========================================
-         * RESPUESTA
-         * ========================================
-         */
-
-        return NextResponse.json({
-            success: true,
-
-            count: finalLeads.length,
-
-            results: finalLeads,
-
-            meta: {
-                raw: rawLeads.length,
-
-                deduplicated:
-                    deduplicatedLeads.length,
-
-                enriched:
-                    enrichedLeads.length,
-
-                scored:
-                    finalLeads.length,
-
-                timing: {
-                    searchMs:
-                        Math.round(searchTime),
-
-                    deduplicatorMs:
-                        Math.round(dedupTime),
-
-                    enrichmentMs:
-                        Math.round(enrichmentTime),
-
-                    scoringMs:
-                        Math.round(scoringTime),
-
-                    totalMs:
-                        Math.round(totalTime)
-                }
-            }
-        });
-
-    } catch (error) {
-
-        const totalTime =
-            performance.now() - totalStart;
-
-        console.error(
-            "[API Search Error]:",
-            error
-        );
-
-        console.error(
-            `[API Search] Falló después de ${(totalTime / 1000).toFixed(2)}s`
-        );
-
-        return NextResponse.json(
-            {
-                success: false,
-                error:
-                    "Error interno del servidor al procesar la búsqueda."
-            },
-            {
-                status: 500
-            }
-        );
-    }
+    return NextResponse.json(
+      {
+        success: false,
+        error:
+          error instanceof Error
+            ? error.message
+            : "Error interno del servidor.",
+      },
+      { status: 500 }
+    );
+  }
 }
+
+
+

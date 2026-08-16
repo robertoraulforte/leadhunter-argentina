@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from "next/server";
+﻿import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 
 /**
@@ -45,7 +45,14 @@ export async function GET() {
 /**
  * POST /api/leads
  *
- * Guarda un lead proveniente del buscador.
+ * Único punto de creación de leads.
+ *
+ * Es utilizado tanto por:
+ * - resultados del buscador
+ * - carga manual desde el Dashboard
+ *
+ * El lead creado queda disponible automáticamente
+ * para el CRM porque se guarda directamente en Prisma.
  */
 export async function POST(request: NextRequest) {
     try {
@@ -77,6 +84,24 @@ export async function POST(request: NextRequest) {
                 }
             );
         }
+
+        const parseOptionalNumber = (
+            value: unknown
+        ): number | null => {
+            if (
+                value === undefined ||
+                value === null ||
+                value === ""
+            ) {
+                return null;
+            }
+
+            const number = Number(value);
+
+            return Number.isFinite(number)
+                ? number
+                : null;
+        };
 
         const lead = await prisma.lead.create({
             data: {
@@ -127,26 +152,17 @@ export async function POST(request: NextRequest) {
                         ? String(body.instagram).trim()
                         : null,
 
-                latitude:
-                    body.latitude !== undefined &&
-                    body.latitude !== null &&
-                    body.latitude !== ""
-                        ? Number(body.latitude)
-                        : null,
+                latitude: parseOptionalNumber(
+                    body.latitude
+                ),
 
-                longitude:
-                    body.longitude !== undefined &&
-                    body.longitude !== null &&
-                    body.longitude !== ""
-                        ? Number(body.longitude)
-                        : null,
+                longitude: parseOptionalNumber(
+                    body.longitude
+                ),
 
-                score:
-                    body.score !== undefined &&
-                    body.score !== null &&
-                    body.score !== ""
-                        ? Number(body.score)
-                        : null,
+                score: parseOptionalNumber(
+                    body.score
+                ),
 
                 priority:
                     body.priority
@@ -174,7 +190,7 @@ export async function POST(request: NextRequest) {
         return NextResponse.json(
             {
                 success: true,
-                message: "Lead guardado correctamente.",
+                message: "Lead creado correctamente.",
                 result: lead,
             },
             {

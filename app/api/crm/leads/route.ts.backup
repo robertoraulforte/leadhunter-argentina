@@ -59,6 +59,143 @@ export async function GET() {
     }
 }
 
+export async function POST(request: NextRequest) {
+    const authError = await requireApiCrmAuth();
+
+    if (authError) {
+        return authError;
+    }
+
+    try {
+        const body = await request.json();
+
+        if (!body || typeof body !== "object") {
+            return NextResponse.json(
+                {
+                    success: false,
+                    error: "Datos inválidos.",
+                },
+                {
+                    status: 400,
+                }
+            );
+        }
+
+        if (!body.name || String(body.name).trim() === "") {
+            return NextResponse.json(
+                {
+                    success: false,
+                    error: "El nombre del lead es obligatorio.",
+                },
+                {
+                    status: 400,
+                }
+            );
+        }
+
+        const lead = await prisma.lead.create({
+            data: {
+                name: String(body.name).trim(),
+
+                category: body.category
+                    ? String(body.category)
+                    : null,
+
+                city: body.city
+                    ? String(body.city)
+                    : null,
+
+                province: body.province
+                    ? String(body.province)
+                    : null,
+
+                address: body.address
+                    ? String(body.address)
+                    : null,
+
+                phone: body.phone
+                    ? String(body.phone)
+                    : null,
+
+                email: body.email
+                    ? String(body.email)
+                    : null,
+
+                website: body.website
+                    ? String(body.website)
+                    : null,
+
+                facebook: body.facebook
+                    ? String(body.facebook)
+                    : null,
+
+                instagram: body.instagram
+                    ? String(body.instagram)
+                    : null,
+
+                latitude:
+                    body.latitude !== undefined &&
+                    body.latitude !== null
+                        ? Number(body.latitude)
+                        : null,
+
+                longitude:
+                    body.longitude !== undefined &&
+                    body.longitude !== null
+                        ? Number(body.longitude)
+                        : null,
+
+                score:
+                    body.score !== undefined &&
+                    body.score !== null
+                        ? Number(body.score)
+                        : null,
+
+                priority: body.priority
+                    ? String(body.priority)
+                    : null,
+
+                source: body.source
+                    ? String(body.source)
+                    : null,
+
+                favorite:
+                    body.favorite === true,
+
+                contacted:
+                    body.contacted === true,
+
+                notes: body.notes
+                    ? String(body.notes)
+                    : null,
+            },
+        });
+
+        return NextResponse.json(
+            {
+                success: true,
+                message: "Lead guardado correctamente.",
+                result: lead,
+            },
+            {
+                status: 201,
+            }
+        );
+    } catch (error) {
+        console.error("[CRM API] Error creando lead:", error);
+
+        return NextResponse.json(
+            {
+                success: false,
+                error: "No se pudo guardar el lead.",
+            },
+            {
+                status: 500,
+            }
+        );
+    }
+}
+
 export async function PATCH(request: NextRequest) {
     const authError = await requireApiCrmAuth();
 
@@ -346,4 +483,3 @@ export async function DELETE(request: NextRequest) {
         );
     }
 }
-

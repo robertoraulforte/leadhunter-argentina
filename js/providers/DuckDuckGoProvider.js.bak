@@ -670,13 +670,7 @@ export class DuckDuckGoProvider
             );
         }
 
-        const html = await response.text();
-
-            console.log('[DuckDuckGoProvider] HTML PREVIEW:',
-            html.slice(0, 3000)
-    );
-
-return html;
+        return await response.text();
     }
 
     async search(filters) {
