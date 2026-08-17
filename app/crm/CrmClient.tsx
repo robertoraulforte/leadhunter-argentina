@@ -1,6 +1,12 @@
 ﻿"use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 
 type Lead = {
   id: string;
@@ -81,6 +87,7 @@ export default function CRMPage() {
   const [leads, setLeads] = useState<Lead[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const savingRef = useRef(false);
   const [error, setError] = useState("");
 
   const [search, setSearch] = useState("");
@@ -245,6 +252,19 @@ export default function CRMPage() {
     id: string,
     changes: Partial<Lead>
   ) {
+    /*
+     * Bloqueo síncrono real.
+     *
+     * setSaving() actualiza la UI de forma asíncrona.
+     * savingRef evita que dos clics extremadamente rápidos
+     * puedan iniciar dos peticiones simultáneas.
+     */
+    if (savingRef.current) {
+      return null;
+    }
+
+    savingRef.current = true;
+
     try {
       setSaving(true);
       setError("");
@@ -296,6 +316,7 @@ export default function CRMPage() {
 
       return null;
     } finally {
+      savingRef.current = false;
       setSaving(false);
     }
   }
@@ -352,6 +373,10 @@ export default function CRMPage() {
   }
 
   async function saveEditedLead() {
+    if (savingRef.current) {
+      return;
+    }
+
     if (!selectedLead) {
       return;
     }
@@ -446,12 +471,20 @@ export default function CRMPage() {
   }
 
   async function toggleFavorite(lead: Lead) {
+    if (savingRef.current) {
+      return;
+    }
+
     await updateLead(lead.id, {
       favorite: !lead.favorite,
     });
   }
 
   async function toggleContacted(lead: Lead) {
+    if (savingRef.current) {
+      return;
+    }
+
     await updateLead(lead.id, {
       contacted: !lead.contacted,
     });
@@ -465,6 +498,16 @@ export default function CRMPage() {
     if (!confirmed) {
       return;
     }
+
+    /*
+     * El bloqueo se hace después de la confirmación.
+     * Así, cancelar el confirm no bloquea el CRM.
+     */
+    if (savingRef.current) {
+      return;
+    }
+
+    savingRef.current = true;
 
     try {
       setSaving(true);
@@ -506,6 +549,7 @@ export default function CRMPage() {
           : "No se pudo eliminar el lead."
       );
     } finally {
+      savingRef.current = false;
       setSaving(false);
     }
   }
@@ -535,6 +579,7 @@ export default function CRMPage() {
       );
     }
   }
+
   const pageClasses = darkMode
     ? "min-h-screen bg-gray-950 text-gray-100 p-6"
     : "min-h-screen bg-gray-50 text-gray-900 p-6";
@@ -608,6 +653,7 @@ export default function CRMPage() {
           >
             Cerrar sesión
           </button>
+
           {/* REFRESH */}
           <button
             type="button"
@@ -1728,7 +1774,3 @@ function DetailItem({
     </div>
   );
 }
-
-
-
-
