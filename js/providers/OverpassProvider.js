@@ -7,7 +7,7 @@ const OVERPASS_ENDPOINTS = [
     'https://overpass-api.de/api/interpreter',
     'https://overpass.kumi.systems/api/interpreter',
     'https://overpass.private.coffee/api/interpreter',
-];
+    ];
 
 const NOMINATIM_ENDPOINT =
     'https://nominatim.openstreetmap.org/search';
@@ -100,6 +100,7 @@ function isGomeria(rubro) {
         value.includes('tire')
     );
 }
+
 
 function looksLikeGomeria(tags) {
     const shop =
@@ -218,6 +219,30 @@ function looksLikeBusiness(tags) {
         tags.brand ||
         tags.operator
     );
+}
+
+async function queryOverpass(endpoint, query) {
+    const response = await fetch(
+        endpoint,
+        {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'text/plain',
+                'User-Agent': 'LeadHunter-Argentina/1.0',
+            },
+            body: query,
+            cache: 'no-store',
+            signal: AbortSignal.timeout(TIMEOUT_MS),
+        }
+    );
+
+    if (!response.ok) {
+        throw new Error(
+            `Overpass HTTP ${response.status}`
+        );
+    }
+
+    return await response.json();
 }
 
 async function searchNominatim(ciudad) {
@@ -350,6 +375,40 @@ out center tags;
     }
 }
 
+function isFarmacia(rubro) {
+    return String(rubro)
+        .trim()
+        .toLowerCase()
+        .includes('farmacia');
+}
+
+function buildFarmaciaQuery(
+    lat,
+    lon
+) {
+    return `
+[out:json][timeout:10];
+
+(
+    nwr[
+        "amenity"="pharmacy"
+    ](
+        around:5000,${lat},${lon}
+    );
+
+    nwr[
+        "shop"="chemist"
+    ](
+        around:5000,${lat},${lon}
+    );
+);
+
+out center tags;
+`;
+}
+
+
+
 function buildGenericQuery(
     lat,
     lon,
@@ -388,87 +447,52 @@ out center tags;
 `;
 }
 
-async function queryOverpass(
-    endpoint,
-    query
-) {
-    console.log(
-        `[OverpassProvider] Probando ${endpoint}`
+async function executeQuery(query) {
+    const attempts = OVERPASS_ENDPOINTS.map(
+        async (endpoint) => {
+            try {
+                const data =
+                    await queryOverpass(
+                        endpoint,
+                        query
+                    );
+
+                console.log(
+                    `[OverpassProvider] Consulta OK: ${endpoint}`
+                );
+
+                return data;
+
+            } catch (error) {
+                console.warn(
+                    `[OverpassProvider] Falló ${endpoint}:`,
+                    error?.message || error
+                );
+
+                return null;
+            }
+        }
     );
 
-    const response =
-        await fetch(
-            endpoint,
-            {
-                method: 'POST',
+    const results =
+        await Promise.allSettled(attempts);
 
-                headers: {
-                    'Content-Type':
-                        'text/plain',
-
-                    'Accept':
-                        'application/json',
-
-                    'User-Agent':
-                        'LeadHunter-Argentina/1.0',
-                },
-
-                body: query,
-
-                cache: 'no-store',
-
-                signal:
-                    AbortSignal.timeout(
-                        TIMEOUT_MS
-                    ),
-            }
-        );
-
-    if (!response.ok) {
-        throw new Error(
-            `Overpass HTTP ${response.status}`
-        );
+    for (const result of results) {
+        if (
+            result.status === 'fulfilled' &&
+            result.value
+        ) {
+            return result.value;
+        }
     }
 
-    return await response.json();
+    console.error(
+        '[OverpassProvider] Todos los servidores Overpass fallaron.'
+    );
+
+    return null;
 }
 
-/*
- * Ejecuta una consulta intentando los endpoints
- * disponibles.
- */
-async function executeQuery(query) {
-
-    const endpoint = OVERPASS_ENDPOINTS[0];
-
-    try {
-
-        const data =
-            await queryOverpass(
-                endpoint,
-                query
-            );
-
-        console.log(
-            "[OverpassProvider] Consulta OK en servidor principal"
-        );
-
-        return data;
-
-    } catch (error) {
-
-        console.warn(
-            "[OverpassProvider] Servidor principal fallo:",
-            error?.message || error
-        );
-
-        console.warn(
-            "[OverpassProvider] Se omite Overpass para esta consulta."
-        );
-
-        return null;
-    }
-}
 function elementToLead(
     element,
     filters,
@@ -804,18 +828,17 @@ export class OverpassProvider
             /*
              * Búsqueda genérica.
              */
-            const query =
-                buildGenericQuery(
-                    coordinates.lat,
-                    coordinates.lon,
-                    rubro
-                );
-
-            console.log(
-                '========== OVERPASS QUERY =========='
+            const query = isFarmacia(rubro)
+                 ? buildFarmaciaQuery(
+                 coordinates.lat,
+                 coordinates.lon
+                                )
+                : buildGenericQuery(
+                 coordinates.lat,
+                 coordinates.lon,
+                 rubro
             );
-
-            console.log(query);
+               console.log(query);
 
             console.log(
                 '====================================='

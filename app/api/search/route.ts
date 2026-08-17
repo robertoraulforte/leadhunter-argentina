@@ -2,6 +2,7 @@
 
 import { SearchService } from "@/js/services/SearchService";
 import { OverpassProvider } from "@/js/providers/OverpassProvider";
+import { DuckDuckGoProvider } from "@/js/providers/DuckDuckGoProvider";
 import { DeduplicatorService } from "@/js/services/DeduplicatorService";
 import { ScoringService } from "@/js/services/ScoringService";
 
@@ -41,15 +42,20 @@ export async function GET(request: NextRequest) {
      * SEARCH SERVICE
      * =========================================================
      *
-     * DuckDuckGo queda desactivado temporalmente.
+     * Consultamos los proveedores en paralelo.
      *
-     * Por ahora utilizamos solamente Overpass.
+     * Cada proveedor tiene manejo de errores independiente
+     * dentro de SearchService.
      */
 
     const searchService = new SearchService();
 
     searchService.registerProvider(
       new OverpassProvider()
+    );
+
+    searchService.registerProvider(
+      new DuckDuckGoProvider()
     );
 
     const rawLeads =
@@ -67,15 +73,18 @@ export async function GET(request: NextRequest) {
 
     /*
      * =========================================================
-     * DEDUPLICACIÃ“N
+     * DEDUPLICACIÓN
      * =========================================================
+     *
+     * Los resultados de Overpass y DuckDuckGo se fusionan
+     * antes del scoring.
      */
 
     const deduplicatedLeads =
       DeduplicatorService.process(rawLeads);
 
     console.log(
-      `[API Search] Leads despuÃ©s de deduplicar: ${deduplicatedLeads.length}`
+      `[API Search] Leads después de deduplicar: ${deduplicatedLeads.length}`
     );
 
     /*
@@ -83,9 +92,7 @@ export async function GET(request: NextRequest) {
      * SCORING
      * =========================================================
      *
-     * LeadEnricherService queda fuera temporalmente porque
-     * actualmente no expone un mÃ©todo enrich().
-     *
+     * LeadEnricherService queda fuera temporalmente.
      * No modificamos ese servicio.
      */
 
@@ -144,6 +151,7 @@ export async function GET(request: NextRequest) {
           ? lead.fuentes
           : [],
     }));
+
     console.log(
       `[API Search] TOTAL: ${
         (Date.now() - startTime) / 1000
@@ -178,6 +186,3 @@ export async function GET(request: NextRequest) {
     );
   }
 }
-
-
-

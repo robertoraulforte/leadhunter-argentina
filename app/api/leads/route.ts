@@ -2,6 +2,44 @@
 import { prisma } from "@/lib/prisma";
 
 /**
+ * Normaliza un texto para comparaciones.
+ */
+function normalizeText(value: unknown): string {
+    return String(value ?? "")
+        .trim()
+        .toLowerCase()
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .replace(/\s+/g, " ");
+}
+
+/**
+ * Normaliza teléfono eliminando caracteres no numéricos.
+ */
+function normalizePhone(value: unknown): string {
+    return String(value ?? "").replace(/\D/g, "");
+}
+
+/**
+ * Normaliza URL para poder comparar variantes del mismo sitio.
+ */
+function normalizeUrl(value: unknown): string {
+    let url = String(value ?? "")
+        .trim()
+        .toLowerCase();
+
+    if (!url) {
+        return "";
+    }
+
+    url = url.replace(/^https?:\/\//, "");
+    url = url.replace(/^www\./, "");
+    url = url.replace(/\/+$/, "");
+
+    return url;
+}
+
+/**
  * GET /api/leads
  *
  * Obtiene todos los leads guardados.
@@ -47,12 +85,13 @@ export async function GET() {
  *
  * Único punto de creación de leads.
  *
- * Es utilizado tanto por:
- * - resultados del buscador
- * - carga manual desde el Dashboard
+ * Antes de crear el registro se realiza una comprobación
+ * de duplicados utilizando:
  *
- * El lead creado queda disponible automáticamente
- * para el CRM porque se guarda directamente en Prisma.
+ * 1. Email
+ * 2. Teléfono
+ * 3. Website
+ * 4. Nombre + ciudad
  */
 export async function POST(request: NextRequest) {
     try {
@@ -85,6 +124,136 @@ export async function POST(request: NextRequest) {
             );
         }
 
+        const name = String(body.name).trim();
+        const category = body.category
+            ? String(body.category).trim()
+            : null;
+
+        const city = body.city
+            ? String(body.city).trim()
+            : null;
+
+        const province = body.province
+            ? String(body.province).trim()
+            : null;
+
+        const phone = body.phone
+            ? String(body.phone).trim()
+            : null;
+
+        const email = body.email
+            ? String(body.email).trim()
+            : null;
+
+        const website = body.website
+            ? String(body.website).trim()
+            : null;
+
+        const normalizedEmail = normalizeText(email);
+        const normalizedPhone = normalizePhone(phone);
+        const normalizedWebsite = normalizeUrl(website);
+        const normalizedName = normalizeText(name);
+        const normalizedCity = normalizeText(city);
+
+        /*
+         * =========================================================
+         * DETECCIÓN DE DUPLICADOS
+         * =========================================================
+         */
+
+        const existingLeads = await prisma.lead.findMany({
+            select: {
+                id: true,
+                name: true,
+                city: true,
+                province: true,
+                phone: true,
+                email: true,
+                website: true,
+            },
+        });
+
+        const duplicate = existingLeads.find((existing) => {
+            /*
+             * 1. Email
+             *
+             * Si ambos tienen email y coinciden, consideramos
+             * que es el mismo lead.
+             */
+            if (
+                normalizedEmail &&
+                normalizeText(existing.email) === normalizedEmail
+            ) {
+                return true;
+            }
+
+            /*
+             * 2. Teléfono
+             *
+             * Comparamos solamente los números.
+             */
+            if (
+                normalizedPhone &&
+                normalizePhone(existing.phone) === normalizedPhone
+            ) {
+                return true;
+            }
+
+            /*
+             * 3. Website
+             *
+             * https://www.empresa.com
+             * empresa.com/
+             *
+             * se consideran el mismo sitio.
+             */
+            if (
+                normalizedWebsite &&
+                normalizeUrl(existing.website) === normalizedWebsite
+            ) {
+                return true;
+            }
+
+            /*
+             * 4. Nombre + ciudad
+             *
+             * Es nuestro último recurso para detectar duplicados.
+             * No usamos solamente el nombre porque pueden existir
+             * empresas con nombres iguales en ciudades diferentes.
+             */
+            if (
+                normalizedName &&
+                normalizedCity &&
+                normalizeText(existing.name) === normalizedName &&
+                normalizeText(existing.city) === normalizedCity
+            ) {
+                return true;
+            }
+
+            return false;
+        });
+
+        if (duplicate) {
+            console.log(
+                `[Leads API] Lead duplicado detectado: "${name}" -> ${duplicate.id}`
+            );
+
+            return NextResponse.json(
+                {
+                    success: false,
+                    duplicate: true,
+                    existingLeadId: duplicate.id,
+                    error: "Este lead ya existe en el CRM.",
+                },
+                {
+                    status: 409,
+                }
+            );
+        }
+
+        /**
+         * Convierte valores opcionales a número.
+         */
         const parseOptionalNumber = (
             value: unknown
         ): number | null => {
@@ -103,44 +272,32 @@ export async function POST(request: NextRequest) {
                 : null;
         };
 
+        /*
+         * =========================================================
+         * CREACIÓN
+         * =========================================================
+         */
+
         const lead = await prisma.lead.create({
             data: {
-                name: String(body.name).trim(),
+                name,
 
-                category:
-                    body.category
-                        ? String(body.category).trim()
-                        : null,
+                category,
 
-                city:
-                    body.city
-                        ? String(body.city).trim()
-                        : null,
+                city,
 
-                province:
-                    body.province
-                        ? String(body.province).trim()
-                        : null,
+                province,
 
                 address:
                     body.address
                         ? String(body.address).trim()
                         : null,
 
-                phone:
-                    body.phone
-                        ? String(body.phone).trim()
-                        : null,
+                phone,
 
-                email:
-                    body.email
-                        ? String(body.email).trim()
-                        : null,
+                email,
 
-                website:
-                    body.website
-                        ? String(body.website).trim()
-                        : null,
+                website,
 
                 facebook:
                     body.facebook
@@ -187,9 +344,14 @@ export async function POST(request: NextRequest) {
             },
         });
 
+        console.log(
+            `[Leads API] Lead creado correctamente: ${lead.id}`
+        );
+
         return NextResponse.json(
             {
                 success: true,
+                duplicate: false,
                 message: "Lead creado correctamente.",
                 result: lead,
             },
