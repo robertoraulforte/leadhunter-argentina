@@ -1,8 +1,19 @@
-﻿'use client';
+﻿"use client";
 
-import { useRef, useState, type FormEvent } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type FormEvent,
+} from "react";
 
-interface LeadResult {
+/* ============================================================
+   TIPOS
+   ============================================================ */
+
+type SearchLead = {
   id: string;
   nombre: string;
   provincia: string;
@@ -18,9 +29,33 @@ interface LeadResult {
   scoreIA: number;
   prioridad: string;
   fuentes: string[];
-}
+};
 
-interface ManualLeadForm {
+type Lead = {
+  id: string;
+  name: string;
+  category: string | null;
+  city: string | null;
+  province: string | null;
+  address: string | null;
+  phone: string | null;
+  email: string | null;
+  website: string | null;
+  facebook: string | null;
+  instagram: string | null;
+  latitude: number | null;
+  longitude: number | null;
+  score: number | null;
+  priority: string | null;
+  source: string | null;
+  favorite: boolean;
+  contacted: boolean;
+  notes: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+type LeadForm = {
   name: string;
   category: string;
   city: string;
@@ -39,215 +74,266 @@ interface ManualLeadForm {
   favorite: boolean;
   contacted: boolean;
   notes: string;
-}
-
-const initialManualLead: ManualLeadForm = {
-  name: '',
-  category: '',
-  city: '',
-  province: '',
-  address: '',
-  phone: '',
-  email: '',
-  website: '',
-  facebook: '',
-  instagram: '',
-  latitude: '',
-  longitude: '',
-  score: '',
-  priority: 'media',
-  source: 'manual',
-  favorite: false,
-  contacted: false,
-  notes: '',
 };
 
-export default function BuscadorLeads() {
-  const [activeTab, setActiveTab] =
-    useState<'search' | 'manual'>('search');
+type ApiResponse = {
+  success: boolean;
+  count?: number;
+  results?: Lead[];
+  result?: Lead;
+  duplicate?: boolean;
+  existingLeadId?: string;
+  message?: string;
+  error?: string;
+};
 
-  const [rubro, setRubro] = useState('');
-  const [ciudad, setCiudad] = useState('');
-  const [provincia, setProvincia] = useState('todas');
+/* ============================================================
+   FORMULARIO VACÍO
+   ============================================================ */
 
-  const [leads, setLeads] = useState<LeadResult[]>([]);
-  const [loading, setLoading] = useState(false);
+const EMPTY_FORM: LeadForm = {
+  name: "",
+  category: "",
+  city: "",
+  province: "",
+  address: "",
+  phone: "",
+  email: "",
+  website: "",
+  facebook: "",
+  instagram: "",
+  latitude: "",
+  longitude: "",
+  score: "",
+  priority: "",
+  source: "",
+  favorite: false,
+  contacted: false,
+  notes: "",
+};
+
+/* ============================================================
+   COMPONENTE PRINCIPAL
+   ============================================================ */
+
+export default function DashboardPage() {
+  /* ----------------------------------------------------------
+     BUSCADOR
+     ---------------------------------------------------------- */
+
+  const [rubro, setRubro] = useState("");
+  const [ciudad, setCiudad] = useState("");
+  const [provincia, setProvincia] = useState("todas");
+
+  const [searchResults, setSearchResults] = useState<SearchLead[]>(
+    []
+  );
+
+  const [searchLoading, setSearchLoading] = useState(false);
   const [searched, setSearched] = useState(false);
 
-  const [savingId, setSavingId] =
-    useState<string | null>(null);
+  /* ----------------------------------------------------------
+     GUARDADO DE RESULTADOS
+     ---------------------------------------------------------- */
 
-  const [savedLeadIds, setSavedLeadIds] =
-    useState<Set<string>>(() => new Set());
+  const [savingSearchId, setSavingSearchId] = useState<string | null>(
+    null
+  );
 
-  /*
-   * Ref para bloquear inmediatamente un segundo clic.
-   * No depende de la actualización asincrónica de React.
-   */
-  const savingLeadIdsRef =
-    useRef<Set<string>>(new Set());
+  const [savedSearchIds, setSavedSearchIds] = useState<Set<string>>(
+    () => new Set()
+  );
 
-  const [manualLead, setManualLead] =
-    useState<ManualLeadForm>({
-      ...initialManualLead,
-    });
+  const savingSearchIdsRef = useRef<Set<string>>(new Set());
 
-  const [savingManual, setSavingManual] =
-    useState(false);
+  /* ----------------------------------------------------------
+     CRM
+     ---------------------------------------------------------- */
 
-  const [successMessage, setSuccessMessage] =
-    useState<string | null>(null);
+  const [leads, setLeads] = useState<Lead[]>([]);
+  const [loadingLeads, setLoadingLeads] = useState(true);
 
-  /*
-   * =========================================================
-   * BUSCAR LEADS
-   * =========================================================
-   */
+  const [crmSearch, setCrmSearch] = useState("");
+  const [priorityFilter, setPriorityFilter] = useState("TODAS");
+  const [statusFilter, setStatusFilter] = useState("TODOS");
 
-  const handleSearch = async (e: FormEvent) => {
-    e.preventDefault();
+  const [selectedLead, setSelectedLead] = useState<Lead | null>(
+    null
+  );
+
+  const [editing, setEditing] = useState(false);
+
+  const [form, setForm] = useState<LeadForm>(EMPTY_FORM);
+
+  const [saving, setSaving] = useState(false);
+  const savingRef = useRef(false);
+
+  /* ----------------------------------------------------------
+     UI
+     ---------------------------------------------------------- */
+
+  const [darkMode, setDarkMode] = useState(true);
+
+  const [error, setError] = useState("");
+
+  const [successMessage, setSuccessMessage] = useState("");
+
+  /* ============================================================
+     CARGAR LEADS DEL CRM
+     ============================================================ */
+
+  const loadLeads = useCallback(async () => {
+    try {
+      setLoadingLeads(true);
+      setError("");
+
+      const response = await fetch("/api/crm/leads", {
+        method: "GET",
+        cache: "no-store",
+      });
+
+      if (!response.ok) {
+        throw new Error(`Error HTTP ${response.status}`);
+      }
+
+      const data: ApiResponse = await response.json();
+
+      if (!data.success) {
+        throw new Error(
+          data.error || "No se pudieron cargar los leads."
+        );
+      }
+
+      setLeads(data.results || []);
+    } catch (err) {
+      console.error("[Dashboard] Error cargando leads:", err);
+
+      setError(
+        err instanceof Error
+          ? err.message
+          : "No se pudieron cargar los leads."
+      );
+    } finally {
+      setLoadingLeads(false);
+    }
+  }, []);
+
+  /* ----------------------------------------------------------
+     Carga inicial
+     ---------------------------------------------------------- */
+
+  useEffect(() => {
+  const timer = window.setTimeout(() => {
+    void loadLeads();
+  }, 0);
+
+  return () => {
+    window.clearTimeout(timer);
+  };
+}, [loadLeads]);
+
+  /* ============================================================
+     BUSCAR
+     ============================================================ */
+
+  const handleSearch = async (event: FormEvent) => {
+    event.preventDefault();
 
     if (!rubro.trim() || !ciudad.trim()) {
-      alert(
-        'Por favor completá el rubro y la ciudad.'
-      );
+      alert("Por favor completá el rubro y la ciudad.");
       return;
     }
 
-    setLoading(true);
+    setSearchLoading(true);
     setSearched(true);
-    setSuccessMessage(null);
+    setError("");
+    setSuccessMessage("");
 
-    /*
-     * Una nueva búsqueda comienza con sus propios
-     * resultados todavía no guardados.
-     */
-    setSavedLeadIds(new Set());
-    savingLeadIdsRef.current.clear();
+    setSavedSearchIds(new Set());
+    savingSearchIdsRef.current.clear();
 
     try {
-      const params = new URLSearchParams({
-        rubro: rubro.trim(),
-        ciudad: ciudad.trim(),
-        provincia,
-      });
+      const url =
+        `/api/search?rubro=${encodeURIComponent(rubro)}` +
+        `&ciudad=${encodeURIComponent(ciudad)}` +
+        `&provincia=${encodeURIComponent(provincia)}`;
 
-      const res = await fetch(
-        `/api/search?${params.toString()}`
-      );
+      const response = await fetch(url);
 
-      const data = await res.json();
+      const data = await response.json();
 
-      if (!res.ok || !data.success) {
-        console.error(
-          '[Dashboard] Error del servidor:',
-          data.error
+      if (!response.ok || !data.success) {
+        throw new Error(
+          data.error || "No se pudo realizar la búsqueda."
         );
-
-        setLeads([]);
-
-        alert(
-          data.error ||
-            'No se pudieron obtener los leads.'
-        );
-
-        return;
       }
 
-      setLeads(
-        Array.isArray(data.results)
-          ? data.results
-          : []
-      );
-    } catch (error) {
-      console.error(
-        '[Dashboard] Error al consultar /api/search:',
-        error
-      );
+      setSearchResults(data.results || []);
+    } catch (err) {
+      console.error("[Dashboard] Error buscando:", err);
 
-      setLeads([]);
+      setSearchResults([]);
 
-      alert(
-        'No se pudo conectar con el servidor de búsqueda.'
+      setError(
+        err instanceof Error
+          ? err.message
+          : "No se pudo realizar la búsqueda."
       );
     } finally {
-      setLoading(false);
+      setSearchLoading(false);
     }
   };
 
-  /*
-   * =========================================================
-   * GUARDAR LEAD DE BÚSQUEDA
-   * =========================================================
-   */
+  /* ============================================================
+     GUARDAR RESULTADO DE BÚSQUEDA
+     ============================================================ */
 
-  const handleSaveLead = async (
-    lead: LeadResult
+  const handleSaveSearchLead = async (
+    lead: SearchLead
   ) => {
-    /*
-     * Bloqueamos:
-     *
-     * 1. si ya se está guardando
-     * 2. si ya fue guardado en esta búsqueda
-     */
     if (
-      savingLeadIdsRef.current.has(lead.id) ||
-      savedLeadIds.has(lead.id)
+      savingSearchIdsRef.current.has(lead.id) ||
+      savedSearchIds.has(lead.id)
     ) {
       return;
     }
 
-    /*
-     * Bloqueo inmediato contra doble clic.
-     */
-    savingLeadIdsRef.current.add(lead.id);
+    savingSearchIdsRef.current.add(lead.id);
 
-    setSavingId(lead.id);
-    setSuccessMessage(null);
+    setSavingSearchId(lead.id);
+    setError("");
+    setSuccessMessage("");
 
     try {
-      const res = await fetch('/api/leads', {
-        method: 'POST',
+      const response = await fetch("/api/leads", {
+        method: "POST",
         headers: {
-          'Content-Type': 'application/json',
+          "Content-Type": "application/json",
         },
         body: JSON.stringify({
           name: lead.nombre,
           category: lead.rubro,
           city: lead.ciudad,
           province: lead.provincia,
-
           phone: lead.telefono,
           email: lead.email,
-
           website: lead.website,
           facebook: lead.facebook,
           instagram: lead.instagram,
-
           latitude: lead.latitude,
           longitude: lead.longitude,
-
           score: lead.scoreIA,
           priority: lead.prioridad,
-
-          source: lead.fuentes.join(', '),
+          source: lead.fuentes.join(", "),
         }),
       });
 
-      const data = await res.json();
+      const data: ApiResponse = await response.json();
 
-      /*
-       * =====================================================
-       * GUARDADO CORRECTO
-       * =====================================================
-       */
-
-      if (res.ok && data.success) {
-        setSavedLeadIds((current) => {
+      if (data.success) {
+        setSavedSearchIds((current) => {
           const next = new Set(current);
-
           next.add(lead.id);
-
           return next;
         });
 
@@ -255,515 +341,852 @@ export default function BuscadorLeads() {
           `Lead "${lead.nombre}" creado correctamente.`
         );
 
+        /*
+         * Actualizamos inmediatamente el listado CRM.
+         */
+        await loadLeads();
+
         return;
       }
 
-      /*
-       * =====================================================
-       * DUPLICADO
-       * =====================================================
-       */
+      savingSearchIdsRef.current.delete(lead.id);
 
-      if (
-        res.status === 409 ||
-        data.duplicate === true
-      ) {
-        /*
-         * Lo dejamos bloqueado para que no se vuelva
-         * a intentar guardar accidentalmente.
-         */
-        setSavedLeadIds((current) => {
-          const next = new Set(current);
-
-          next.add(lead.id);
-
-          return next;
-        });
-
+      if (data.duplicate) {
         alert(
           `⚠️ El lead "${lead.nombre}" ya existe en el CRM.`
         );
 
-        return;
-      }
-
-      /*
-       * =====================================================
-       * OTRO ERROR
-       * =====================================================
-       */
-
-      savingLeadIdsRef.current.delete(
-        lead.id
-      );
-
-      alert(
-        `No se pudo guardar el lead: ${
+        /*
+         * Lo recargamos para que el usuario pueda verlo
+         * en la sección Mis Leads.
+         */
+        await loadLeads();
+      } else {
+        alert(
           data.error ||
-          'Intentá nuevamente.'
-        }`
-      );
-    } catch (error) {
-      /*
-       * Si falla la conexión permitimos reintentar.
-       */
-      savingLeadIdsRef.current.delete(
-        lead.id
-      );
+            "No se pudo guardar el lead."
+        );
+      }
+    } catch (err) {
+      savingSearchIdsRef.current.delete(lead.id);
 
       console.error(
-        '[Dashboard] Error al guardar lead:',
-        error
+        "[Dashboard] Error guardando lead:",
+        err
       );
 
       alert(
-        'Error de conexión al guardar el lead.'
+        "Error de conexión al guardar el lead."
       );
     } finally {
-      setSavingId(null);
+      setSavingSearchId(null);
     }
   };
 
-  /*
-   * =========================================================
-   * CAMBIOS DEL FORMULARIO MANUAL
-   * =========================================================
-   */
+  /* ============================================================
+     FILTROS CRM
+     ============================================================ */
 
-  const handleManualChange = (
-    field: keyof ManualLeadForm,
-    value: string | boolean
-  ) => {
-    setManualLead((current) => ({
+  const filteredLeads = useMemo(() => {
+    const normalizedSearch =
+      crmSearch.trim().toLowerCase();
+
+    return leads.filter((lead) => {
+      const searchableValues = [
+        lead.name,
+        lead.category,
+        lead.city,
+        lead.province,
+        lead.phone,
+        lead.email,
+        lead.website,
+        lead.facebook,
+        lead.instagram,
+        lead.source,
+      ];
+
+      const matchesSearch =
+        !normalizedSearch ||
+        searchableValues
+          .filter(Boolean)
+          .some((value) =>
+            String(value)
+              .toLowerCase()
+              .includes(normalizedSearch)
+          );
+
+      const matchesPriority =
+        priorityFilter === "TODAS" ||
+        (lead.priority || "").toUpperCase() ===
+          priorityFilter;
+
+      const matchesStatus =
+        statusFilter === "TODOS" ||
+        (statusFilter === "CONTACTADOS" &&
+          lead.contacted) ||
+        (statusFilter === "NO_CONTACTADOS" &&
+          !lead.contacted) ||
+        (statusFilter === "FAVORITOS" &&
+          lead.favorite);
+
+      return (
+        matchesSearch &&
+        matchesPriority &&
+        matchesStatus
+      );
+    });
+  }, [
+    leads,
+    crmSearch,
+    priorityFilter,
+    statusFilter,
+  ]);
+
+  /* ============================================================
+     ESTADÍSTICAS
+     ============================================================ */
+
+  const stats = useMemo(() => {
+    return {
+      total: leads.length,
+
+      alta: leads.filter(
+        (lead) =>
+          (lead.priority || "").toUpperCase() ===
+          "ALTA"
+      ).length,
+
+      contactados: leads.filter(
+        (lead) => lead.contacted
+      ).length,
+
+      favoritos: leads.filter(
+        (lead) => lead.favorite
+      ).length,
+    };
+  }, [leads]);
+
+  /* ============================================================
+     ACTUALIZAR LEAD
+     ============================================================ */
+
+  async function updateLead(
+    id: string,
+    changes: Partial<Lead>
+  ) {
+    if (savingRef.current) {
+      return null;
+    }
+
+    savingRef.current = true;
+
+    try {
+      setSaving(true);
+      setError("");
+
+      const response = await fetch(
+        "/api/crm/leads",
+        {
+          method: "PATCH",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            id,
+            ...changes,
+          }),
+        }
+      );
+
+      const data: ApiResponse =
+        await response.json();
+
+      if (
+        !response.ok ||
+        !data.success ||
+        !data.result
+      ) {
+        throw new Error(
+          data.error ||
+            "No se pudo actualizar el lead."
+        );
+      }
+
+      const updatedLead = data.result;
+
+      setLeads((current) =>
+        current.map((lead) =>
+          lead.id === updatedLead.id
+            ? updatedLead
+            : lead
+        )
+      );
+
+      setSelectedLead((current) =>
+        current?.id === updatedLead.id
+          ? updatedLead
+          : current
+      );
+
+      return updatedLead;
+    } catch (err) {
+      console.error(
+        "[Dashboard] Error actualizando lead:",
+        err
+      );
+
+      setError(
+        err instanceof Error
+          ? err.message
+          : "No se pudo actualizar el lead."
+      );
+
+      return null;
+    } finally {
+      savingRef.current = false;
+      setSaving(false);
+    }
+  }
+
+  /* ============================================================
+     ABRIR LEAD
+     ============================================================ */
+
+  function openLead(lead: Lead) {
+    setSelectedLead(lead);
+    setEditing(false);
+    setError("");
+
+    setForm({
+      name: lead.name || "",
+      category: lead.category || "",
+      city: lead.city || "",
+      province: lead.province || "",
+      address: lead.address || "",
+      phone: lead.phone || "",
+      email: lead.email || "",
+      website: lead.website || "",
+      facebook: lead.facebook || "",
+      instagram: lead.instagram || "",
+      latitude:
+        lead.latitude !== null
+          ? String(lead.latitude)
+          : "",
+      longitude:
+        lead.longitude !== null
+          ? String(lead.longitude)
+          : "",
+      score:
+        lead.score !== null
+          ? String(lead.score)
+          : "",
+      priority: lead.priority || "",
+      source: lead.source || "",
+      favorite: lead.favorite,
+      contacted: lead.contacted,
+      notes: lead.notes || "",
+    });
+  }
+
+  /* ============================================================
+     CERRAR LEAD
+     ============================================================ */
+
+  function closeLead() {
+    setSelectedLead(null);
+    setEditing(false);
+    setForm(EMPTY_FORM);
+    setError("");
+  }
+
+  /* ============================================================
+     FORMULARIO
+     ============================================================ */
+
+  function updateForm<K extends keyof LeadForm>(
+    field: K,
+    value: LeadForm[K]
+  ) {
+    setForm((current) => ({
       ...current,
       [field]: value,
     }));
-  };
+  }
 
-  /*
-   * =========================================================
-   * CREAR LEAD MANUAL
-   * =========================================================
-   */
+  /* ============================================================
+     GUARDAR EDICIÓN
+     ============================================================ */
 
-  const handleManualSubmit = async (
-    e: FormEvent
-  ) => {
-    e.preventDefault();
+  async function saveEditedLead() {
+    if (savingRef.current) {
+      return;
+    }
 
-    if (!manualLead.name.trim()) {
-      alert(
-        'El nombre del lead es obligatorio.'
+    if (!selectedLead) {
+      return;
+    }
+
+    if (!form.name.trim()) {
+      setError(
+        "El nombre del lead es obligatorio."
+      );
+      return;
+    }
+
+    const scoreValue =
+      form.score.trim() === ""
+        ? null
+        : Number(form.score);
+
+    if (
+      scoreValue !== null &&
+      (Number.isNaN(scoreValue) ||
+        scoreValue < 0 ||
+        scoreValue > 100)
+    ) {
+      setError(
+        "El score debe estar entre 0 y 100."
+      );
+      return;
+    }
+
+    const latitudeValue =
+      form.latitude.trim() === ""
+        ? null
+        : Number(form.latitude);
+
+    const longitudeValue =
+      form.longitude.trim() === ""
+        ? null
+        : Number(form.longitude);
+
+    const updated = await updateLead(
+      selectedLead.id,
+      {
+        name: form.name.trim(),
+        category:
+          form.category.trim() || null,
+        city: form.city.trim() || null,
+        province:
+          form.province.trim() || null,
+        address:
+          form.address.trim() || null,
+        phone:
+          form.phone.trim() || null,
+        email:
+          form.email.trim() || null,
+        website:
+          form.website.trim() || null,
+        facebook:
+          form.facebook.trim() || null,
+        instagram:
+          form.instagram.trim() || null,
+        latitude: latitudeValue,
+        longitude: longitudeValue,
+        score: scoreValue,
+        priority:
+          form.priority || null,
+        source:
+          form.source.trim() || null,
+        favorite: form.favorite,
+        contacted: form.contacted,
+        notes:
+          form.notes.trim() || null,
+      }
+    );
+
+    if (updated) {
+      setEditing(false);
+
+      setSuccessMessage(
+        `Lead "${updated.name}" actualizado correctamente.`
+      );
+    }
+  }
+
+  /* ============================================================
+     FAVORITO
+     ============================================================ */
+
+  async function toggleFavorite(
+    lead: Lead
+  ) {
+    if (savingRef.current) {
+      return;
+    }
+
+    await updateLead(lead.id, {
+      favorite: !lead.favorite,
+    });
+  }
+
+  /* ============================================================
+     CONTACTADO
+     ============================================================ */
+
+  async function toggleContacted(
+    lead: Lead
+  ) {
+    if (savingRef.current) {
+      return;
+    }
+
+    await updateLead(lead.id, {
+      contacted: !lead.contacted,
+    });
+  }
+
+  /* ============================================================
+     ELIMINAR
+     ============================================================ */
+
+  async function deleteLead(
+    lead: Lead
+  ) {
+    const confirmed =
+      window.confirm(
+        `¿Seguro que querés eliminar "${lead.name}"?`
       );
 
+    if (!confirmed) {
       return;
     }
 
-    if (savingManual) {
+    if (savingRef.current) {
       return;
     }
 
-    setSavingManual(true);
-    setSuccessMessage(null);
+    savingRef.current = true;
 
     try {
-      const res = await fetch('/api/leads', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          ...manualLead,
+      setSaving(true);
+      setError("");
 
-          name: manualLead.name.trim(),
-          category:
-            manualLead.category.trim(),
-          city:
-            manualLead.city.trim(),
-          province:
-            manualLead.province.trim(),
-          address:
-            manualLead.address.trim(),
-          phone:
-            manualLead.phone.trim(),
-          email:
-            manualLead.email.trim(),
-          website:
-            manualLead.website.trim(),
-          facebook:
-            manualLead.facebook.trim(),
-          instagram:
-            manualLead.instagram.trim(),
-          latitude:
-            manualLead.latitude.trim(),
-          longitude:
-            manualLead.longitude.trim(),
-          score:
-            manualLead.score.trim(),
-          priority:
-            manualLead.priority.trim(),
-          source:
-            manualLead.source.trim(),
-          notes:
-            manualLead.notes.trim(),
-        }),
-      });
+      const response = await fetch(
+        "/api/crm/leads",
+        {
+          method: "DELETE",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            id: lead.id,
+          }),
+        }
+      );
 
-      const data = await res.json();
+      const data: ApiResponse =
+        await response.json();
 
-      /*
-       * =====================================================
-       * CORRECTO
-       * =====================================================
-       */
-
-      if (res.ok && data.success) {
-        setSuccessMessage(
-          `Lead "${manualLead.name}" creado correctamente.`
+      if (!response.ok || !data.success) {
+        throw new Error(
+          data.error ||
+            "No se pudo eliminar el lead."
         );
-
-        setManualLead({
-          ...initialManualLead,
-        });
-
-        return;
       }
 
-      /*
-       * =====================================================
-       * DUPLICADO
-       * =====================================================
-       */
+      setLeads((current) =>
+        current.filter(
+          (item) => item.id !== lead.id
+        )
+      );
 
       if (
-        res.status === 409 ||
-        data.duplicate === true
+        selectedLead?.id === lead.id
       ) {
-        alert(
-          `⚠️ El lead "${manualLead.name}" ya existe en el CRM.`
-        );
-
-        return;
+        closeLead();
       }
 
-      /*
-       * =====================================================
-       * OTRO ERROR
-       * =====================================================
-       */
-
-      alert(
-        `Error al guardar: ${
-          data.error ||
-          'Intentá nuevamente.'
-        }`
+      setSuccessMessage(
+        `Lead "${lead.name}" eliminado correctamente.`
       );
-    } catch (error) {
+    } catch (err) {
       console.error(
-        '[Dashboard] Error al guardar lead manual:',
-        error
+        "[Dashboard] Error eliminando lead:",
+        err
       );
 
-      alert(
-        'Error de conexión al guardar el lead.'
+      setError(
+        err instanceof Error
+          ? err.message
+          : "No se pudo eliminar el lead."
       );
     } finally {
-      setSavingManual(false);
+      savingRef.current = false;
+      setSaving(false);
     }
-  };
+  }
 
-  /*
-   * =========================================================
-   * RENDER
-   * =========================================================
-   */
+  /* ============================================================
+     LOGOUT
+     ============================================================ */
+
+  async function handleLogout() {
+    try {
+      const response = await fetch(
+        "/api/crm/logout",
+        {
+          method: "POST",
+        }
+      );
+
+      const data =
+        await response.json();
+
+      if (
+        !response.ok ||
+        !data.success
+      ) {
+        throw new Error(
+          data.error ||
+            "No se pudo cerrar la sesión."
+        );
+      }
+
+      window.location.href =
+        "/crm/login";
+    } catch (err) {
+      console.error(
+        "[Dashboard] Error cerrando sesión:",
+        err
+      );
+
+      setError(
+        err instanceof Error
+          ? err.message
+          : "No se pudo cerrar la sesión."
+      );
+    }
+  }
+
+  /* ============================================================
+     ESTILOS
+     ============================================================ */
+
+  const cardClasses =
+    "rounded-xl border border-slate-800 bg-slate-900 shadow-sm";
+
+  const inputClasses =
+    "w-full rounded-lg border border-slate-700 bg-slate-800 px-3 py-2.5 text-sm text-white outline-none placeholder:text-slate-500 focus:border-blue-500 focus:ring-2 focus:ring-blue-900";
+
+  /* ============================================================
+     RENDER
+     ============================================================ */
 
   return (
-    <div className="p-6 max-w-7xl mx-auto space-y-6">
+    <div className="min-h-screen bg-slate-950 text-slate-100 p-4 md:p-6">
 
-      {/* =====================================================
-          CABECERA
-          ===================================================== */}
+      <div className="mx-auto max-w-[1600px] space-y-6">
 
-      <div>
-        <h1 className="text-2xl font-bold text-white">
-          Gestión de Leads
-        </h1>
+        {/* ======================================================
+            HEADER
+            ====================================================== */}
 
-        <p className="text-slate-400 mt-1">
-          Buscá nuevos prospectos o cargá un lead manualmente.
-        </p>
-      </div>
-
-      {/* =====================================================
-          TABS
-          ===================================================== */}
-
-      <div className="bg-slate-900 border border-slate-800 rounded-xl p-2 flex gap-2">
-
-        <button
-          type="button"
-          onClick={() =>
-            setActiveTab('search')
-          }
-          className={`flex-1 md:flex-none px-5 py-2.5 rounded-lg font-medium transition ${
-            activeTab === 'search'
-              ? 'bg-blue-600 text-white'
-              : 'text-slate-400 hover:bg-slate-800 hover:text-white'
-          }`}
+        <header
+          className={`${cardClasses} p-5`}
         >
-          🔎 Buscar leads
-        </button>
+          <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
 
-        <button
-          type="button"
-          onClick={() =>
-            setActiveTab('manual')
-          }
-          className={`flex-1 md:flex-none px-5 py-2.5 rounded-lg font-medium transition ${
-            activeTab === 'manual'
-              ? 'bg-blue-600 text-white'
-              : 'text-slate-400 hover:bg-slate-800 hover:text-white'
-          }`}
-        >
-          ➕ Cargar lead
-        </button>
+            <div>
+              <h1 className="text-3xl font-bold text-white">
+                LeadHunter Argentina
+              </h1>
 
-      </div>
+              <p className="mt-1 text-sm text-slate-400">
+                Búsqueda, gestión y seguimiento de leads
+                en un solo lugar.
+              </p>
+            </div>
 
-      {/* =====================================================
-          MENSAJE DE ÉXITO
-          ===================================================== */}
+            <div className="flex flex-wrap gap-2">
 
-      {successMessage && (
-        <div className="bg-emerald-950/60 border border-emerald-800 rounded-xl p-4 flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+              <button
+                type="button"
+                onClick={() =>
+                  setDarkMode(
+                    (current) => !current
+                  )
+                }
+                className="rounded-lg border border-slate-700 bg-slate-800 px-4 py-2 text-sm font-medium text-slate-200 transition hover:bg-slate-700"
+              >
+                {darkMode
+                  ? "☀️ Modo claro"
+                  : "🌙 Modo dark"}
+              </button>
 
-          <div>
-            <p className="text-emerald-300 font-semibold">
-              ✓ {successMessage}
-            </p>
+              <button
+                type="button"
+                onClick={() =>
+                  void loadLeads()
+                }
+                disabled={
+                  loadingLeads ||
+                  saving
+                }
+                className="rounded-lg bg-slate-100 px-4 py-2 text-sm font-medium text-slate-900 transition hover:bg-white disabled:opacity-50"
+              >
+                {loadingLeads
+                  ? "Actualizando..."
+                  : "↻ Actualizar"}
+              </button>
 
-            <p className="text-emerald-400/80 text-sm mt-1">
-              El lead ya está disponible en el CRM.
-            </p>
+              <button
+                type="button"
+                onClick={() =>
+                  void handleLogout()
+                }
+                disabled={saving}
+                className="rounded-lg border border-red-900 bg-slate-900 px-4 py-2 text-sm font-medium text-red-400 transition hover:bg-red-950 disabled:opacity-50"
+              >
+                Cerrar sesión
+              </button>
+
+            </div>
           </div>
+        </header>
 
-          <a
-            href="/crm"
-            className="inline-flex justify-center items-center px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-medium transition"
-          >
-            Ver en CRM
-          </a>
+        {/* ======================================================
+            ERROR
+            ====================================================== */}
 
-        </div>
-      )}
+        {error && (
+          <div className="rounded-lg border border-red-900 bg-red-950/50 px-4 py-3 text-sm text-red-300">
+            {error}
+          </div>
+        )}
 
-      {/* =====================================================
-          TAB BUSCAR
-          ===================================================== */}
+        {/* ======================================================
+            ÉXITO
+            ====================================================== */}
 
-      {activeTab === 'search' && (
-        <>
-          {/* FORMULARIO DE BÚSQUEDA */}
+        {successMessage && (
+          <div className="flex flex-col gap-3 rounded-xl border border-emerald-800 bg-emerald-950/50 p-4 md:flex-row md:items-center md:justify-between">
 
-          <div className="bg-slate-900 border border-slate-800 rounded-xl p-6 shadow-md">
+            <div>
+              <p className="font-semibold text-emerald-300">
+                ✓ {successMessage}
+              </p>
 
-            <h2 className="text-xl font-bold text-white mb-4 flex items-center gap-2">
+              <p className="mt-1 text-sm text-emerald-400/80">
+                La información ya está actualizada.
+              </p>
+            </div>
+
+            <button
+              type="button"
+              onClick={() =>
+                setSuccessMessage("")
+              }
+              className="rounded-lg border border-emerald-800 px-3 py-2 text-sm text-emerald-300 hover:bg-emerald-900/50"
+            >
+              Cerrar
+            </button>
+
+          </div>
+        )}
+
+        {/* ======================================================
+            BUSCADOR
+            ====================================================== */}
+
+        <section className={`${cardClasses} p-6`}>
+
+          <div className="mb-5">
+            <h2 className="text-xl font-bold text-white">
               🔎 Buscar empresas y leads
             </h2>
 
-            <form
-              onSubmit={handleSearch}
-              className="grid grid-cols-1 md:grid-cols-3 gap-4"
-            >
-
-              {/* RUBRO */}
-
-              <div>
-                <label className="block text-sm font-medium text-slate-300 mb-1">
-                  Rubro
-                </label>
-
-                <input
-                  type="text"
-                  placeholder="Ej: gomería, clínica, ferretería"
-                  value={rubro}
-                  onChange={(e) =>
-                    setRubro(e.target.value)
-                  }
-                  className="w-full bg-slate-800 border border-slate-700 text-white rounded-lg p-2.5 focus:border-blue-500 outline-none"
-                />
-              </div>
-
-              {/* CIUDAD */}
-
-              <div>
-                <label className="block text-sm font-medium text-slate-300 mb-1">
-                  Ciudad
-                </label>
-
-                <input
-                  type="text"
-                  placeholder="Ej: Balcarce, Mar del Plata, Córdoba"
-                  value={ciudad}
-                  onChange={(e) =>
-                    setCiudad(e.target.value)
-                  }
-                  className="w-full bg-slate-800 border border-slate-700 text-white rounded-lg p-2.5 focus:border-blue-500 outline-none"
-                />
-              </div>
-
-              {/* PROVINCIA */}
-
-              <div>
-                <label className="block text-sm font-medium text-slate-300 mb-1">
-                  Provincia
-                </label>
-
-                <select
-                  value={provincia}
-                  onChange={(e) =>
-                    setProvincia(e.target.value)
-                  }
-                  className="w-full bg-slate-800 border border-slate-700 text-white rounded-lg p-2.5 focus:border-blue-500 outline-none"
-                >
-                  <option value="todas">
-                    Todas
-                  </option>
-
-                  <option value="bsas">
-                    Buenos Aires
-                  </option>
-
-                  <option value="caba">
-                    CABA
-                  </option>
-
-                  <option value="cordoba">
-                    Córdoba
-                  </option>
-
-                  <option value="santa-fe">
-                    Santa Fe
-                  </option>
-                </select>
-              </div>
-
-              {/* BOTÓN */}
-
-              <div className="md:col-span-3 flex justify-end mt-2">
-
-                <button
-                  type="submit"
-                  disabled={loading}
-                  className="bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white font-semibold px-6 py-2.5 rounded-lg transition flex items-center gap-2"
-                >
-                  {loading
-                    ? 'Consultando pipeline...'
-                    : 'Buscar leads'}
-                </button>
-
-              </div>
-
-            </form>
-
+            <p className="mt-1 text-sm text-slate-400">
+              Buscá nuevos prospectos y guardalos
+              directamente en tu base.
+            </p>
           </div>
 
-          {/* RESULTADOS */}
+          <form
+            onSubmit={handleSearch}
+            className="grid grid-cols-1 gap-4 md:grid-cols-3"
+          >
 
-          <div>
+            <div>
+              <label className="mb-2 block text-sm font-medium text-slate-300">
+                Rubro
+              </label>
 
-            <h3 className="text-lg font-semibold text-white mb-4">
-              Resultados{' '}
-              {searched &&
-                `(${leads.length} leads encontrados)`}
-            </h3>
+              <input
+                type="text"
+                value={rubro}
+                onChange={(event) =>
+                  setRubro(
+                    event.target.value
+                  )
+                }
+                placeholder="Ej: gomería, clínica, ferretería"
+                className={inputClasses}
+              />
+            </div>
 
-            {loading ? (
-              <div className="text-center py-12 text-slate-400">
+            <div>
+              <label className="mb-2 block text-sm font-medium text-slate-300">
+                Ciudad
+              </label>
+
+              <input
+                type="text"
+                value={ciudad}
+                onChange={(event) =>
+                  setCiudad(
+                    event.target.value
+                  )
+                }
+                placeholder="Ej: Balcarce, Mar del Plata"
+                className={inputClasses}
+              />
+            </div>
+
+            <div>
+              <label className="mb-2 block text-sm font-medium text-slate-300">
+                Provincia
+              </label>
+
+              <select
+                value={provincia}
+                onChange={(event) =>
+                  setProvincia(
+                    event.target.value
+                  )
+                }
+                className={inputClasses}
+              >
+                <option value="todas">
+                  Todas
+                </option>
+
+                <option value="bsas">
+                  Buenos Aires
+                </option>
+
+                <option value="caba">
+                  CABA
+                </option>
+
+                <option value="cordoba">
+                  Córdoba
+                </option>
+
+                <option value="santa-fe">
+                  Santa Fe
+                </option>
+              </select>
+            </div>
+
+            <div className="md:col-span-3 flex justify-end">
+
+              <button
+                type="submit"
+                disabled={searchLoading}
+                className="rounded-lg bg-blue-600 px-6 py-2.5 font-semibold text-white transition hover:bg-blue-500 disabled:opacity-50"
+              >
+                {searchLoading
+                  ? "Consultando pipeline..."
+                  : "🔎 Buscar leads"}
+              </button>
+
+            </div>
+
+          </form>
+        </section>
+
+        {/* ======================================================
+            RESULTADOS DE BÚSQUEDA
+            ====================================================== */}
+
+        {searched && (
+          <section>
+
+            <div className="mb-4 flex items-center justify-between">
+
+              <div>
+                <h2 className="text-xl font-bold text-white">
+                  Resultados de búsqueda
+                </h2>
+
+                <p className="mt-1 text-sm text-slate-400">
+                  {searchResults.length} leads encontrados
+                </p>
+              </div>
+
+            </div>
+
+            {searchLoading ? (
+              <div className={`${cardClasses} p-12 text-center text-slate-400`}>
                 <p className="animate-pulse">
                   Ejecutando motores de búsqueda en paralelo...
                 </p>
               </div>
-            ) : leads.length > 0 ? (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            ) : searchResults.length === 0 ? (
+              <div className={`${cardClasses} p-12 text-center text-slate-400`}>
+                No se encontraron leads para esta búsqueda.
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
 
-                {leads.map((lead) => {
-                  const isSaving =
-                    savingId === lead.id;
+                {searchResults.map(
+                  (lead) => {
+                    const isSaving =
+                      savingSearchId ===
+                      lead.id;
 
-                  const isSaved =
-                    savedLeadIds.has(
-                      lead.id
-                    );
+                    const isSaved =
+                      savedSearchIds.has(
+                        lead.id
+                      );
 
-                  return (
-                    <div
-                      key={lead.id}
-                      className={`bg-slate-900 border rounded-xl p-5 flex flex-col justify-between transition ${
-                        isSaved
-                          ? 'border-emerald-800'
-                          : 'border-slate-800 hover:border-blue-500'
-                      }`}
-                    >
+                    return (
+                      <div
+                        key={lead.id}
+                        className={`flex flex-col justify-between rounded-xl border bg-slate-900 p-5 ${
+                          isSaved
+                            ? "border-emerald-800"
+                            : "border-slate-800 hover:border-blue-700"
+                        }`}
+                      >
 
-                      <div>
+                        <div>
 
-                        <div className="flex justify-between items-start mb-2 gap-3">
+                          <div className="mb-3 flex items-start justify-between gap-3">
 
-                          <h4 className="font-bold text-white text-lg">
-                            {lead.nombre}
-                          </h4>
+                            <h3 className="text-lg font-bold text-white">
+                              {lead.nombre}
+                            </h3>
 
-                          <span
-                            className={`shrink-0 text-xs font-semibold px-2.5 py-1 rounded-full border ${
-                              lead.scoreIA >= 80
-                                ? 'bg-emerald-950 text-emerald-300 border-emerald-800'
-                                : 'bg-amber-950 text-amber-300 border-amber-800'
-                            }`}
-                          >
-                            Score: {lead.scoreIA}%
-                          </span>
+                            <span className="shrink-0 rounded-full border border-emerald-800 bg-emerald-950 px-2.5 py-1 text-xs font-semibold text-emerald-300">
+                              {lead.scoreIA}
+                            </span>
 
-                        </div>
+                          </div>
 
-                        <p className="text-sm text-slate-400 mb-1">
-                          📍 {lead.ciudad},{' '}
-                          {lead.provincia}
-                        </p>
-
-                        <p className="text-sm text-slate-300 mb-1">
-                          ✉️{' '}
-                          {lead.email ||
-                            'No disponible'}
-                        </p>
-
-                        <p className="text-sm text-slate-300 mb-1">
-                          📞{' '}
-                          {lead.telefono ||
-                            'No disponible'}
-                        </p>
-
-                        {lead.website && (
-                          <p className="text-sm text-slate-300 mb-1 truncate">
-                            🌐 {lead.website}
+                          <p className="mb-2 text-sm text-slate-400">
+                            📍 {lead.ciudad},{" "}
+                            {lead.provincia}
                           </p>
-                        )}
 
-                        {(lead.facebook ||
-                          lead.instagram) && (
-                          <p className="text-sm text-slate-300 mb-3">
-                            📱 Redes sociales disponibles
+                          <p className="mb-2 text-sm text-slate-300">
+                            🏷️ {lead.rubro}
                           </p>
-                        )}
 
-                        <div className="mb-4">
+                          <p className="mb-2 text-sm text-slate-300">
+                            📞{" "}
+                            {lead.telefono ||
+                              "No disponible"}
+                          </p>
 
-                          <span className="text-xs text-slate-500 block mb-1">
-                            Fuentes:
-                          </span>
+                          <p className="mb-4 text-sm text-slate-300">
+                            ✉️{" "}
+                            {lead.email ||
+                              "No disponible"}
+                          </p>
 
-                          <div className="flex flex-wrap gap-1">
+                          <div className="mb-4 flex flex-wrap gap-1">
 
                             {lead.fuentes.map(
                               (
@@ -772,7 +1195,7 @@ export default function BuscadorLeads() {
                               ) => (
                                 <span
                                   key={`${fuente}-${index}`}
-                                  className="text-xs bg-slate-800 text-slate-300 px-2 py-0.5 rounded border border-slate-700"
+                                  className="rounded border border-slate-700 bg-slate-800 px-2 py-1 text-xs text-slate-300"
                                 >
                                   {fuente}
                                 </span>
@@ -783,578 +1206,1124 @@ export default function BuscadorLeads() {
 
                         </div>
 
+                        <button
+                          type="button"
+                          onClick={() =>
+                            void handleSaveSearchLead(
+                              lead
+                            )
+                          }
+                          disabled={
+                            isSaving ||
+                            isSaved
+                          }
+                          className={`w-full rounded-lg border py-2.5 text-sm font-semibold transition ${
+                            isSaved
+                              ? "cursor-default border-emerald-800 bg-emerald-950 text-emerald-300"
+                              : "border-blue-800 bg-blue-950 text-blue-300 hover:bg-blue-900 disabled:opacity-50"
+                          }`}
+                        >
+                          {isSaving
+                            ? "Guardando..."
+                            : isSaved
+                              ? "✓ Guardado"
+                              : "Guardar lead"}
+                        </button>
+
                       </div>
-
-                      {/* BOTÓN GUARDAR */}
-
-                      <button
-                        type="button"
-                        onClick={() =>
-                          handleSaveLead(
-                            lead
-                          )
-                        }
-                        disabled={
-                          isSaving ||
-                          isSaved
-                        }
-                        className={`w-full py-2 rounded-lg text-sm font-medium transition border ${
-                          isSaved
-                            ? 'bg-emerald-950 text-emerald-300 border-emerald-800 cursor-default'
-                            : 'bg-slate-800 hover:bg-slate-700 disabled:opacity-50 text-blue-400 border-slate-700'
-                        }`}
-                      >
-                        {isSaving
-                          ? 'Guardando...'
-                          : isSaved
-                            ? '✓ Guardado'
-                            : 'Guardar lead'}
-                      </button>
-
-                    </div>
-                  );
-                })}
+                    );
+                  }
+                )}
 
               </div>
-            ) : searched ? (
-              <div className="text-center py-12 bg-slate-900 border border-slate-800 rounded-xl text-slate-400">
-                No se encontraron leads para esa búsqueda.
-                Intentá con otra ciudad o rubro.
-              </div>
-            ) : null}
+            )}
 
-          </div>
-        </>
-      )}
+          </section>
+        )}
 
-      {/* =====================================================
-          TAB CARGA MANUAL
-          ===================================================== */}
+        {/* ======================================================
+            SEPARADOR
+            ====================================================== */}
 
-      {activeTab === 'manual' && (
-        <div className="bg-slate-900 border border-slate-800 rounded-xl p-6 shadow-md">
+        <div className="flex items-center gap-4 py-2">
 
-          <div className="mb-6">
+          <div className="h-px flex-1 bg-slate-800" />
 
-            <h2 className="text-xl font-bold text-white">
-              ➕ Cargar lead manualmente
-            </h2>
+          <span className="text-xs font-semibold uppercase tracking-widest text-slate-500">
+            Mis Leads
+          </span>
 
-            <p className="text-sm text-slate-400 mt-1">
-              Completá los datos del prospecto. El nombre es obligatorio.
-            </p>
+          <div className="h-px flex-1 bg-slate-800" />
 
-          </div>
+        </div>
 
-          <form
-            onSubmit={handleManualSubmit}
-            className="space-y-6"
-          >
+        {/* ======================================================
+            ESTADÍSTICAS
+            ====================================================== */}
 
-            {/* INFORMACIÓN PRINCIPAL */}
+        <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+
+          <StatCard
+            title="Total de leads"
+            value={stats.total}
+            icon="👥"
+          />
+
+          <StatCard
+            title="Prioridad alta"
+            value={stats.alta}
+            icon="🔥"
+          />
+
+          <StatCard
+            title="Contactados"
+            value={stats.contactados}
+            icon="📞"
+          />
+
+          <StatCard
+            title="Favoritos"
+            value={stats.favoritos}
+            icon="⭐"
+          />
+
+        </section>
+
+        {/* ======================================================
+            FILTROS CRM
+            ====================================================== */}
+
+        <section className={`${cardClasses} p-5`}>
+
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
 
             <div>
-
-              <h3 className="text-sm font-semibold text-blue-400 uppercase tracking-wide mb-3">
-                Información principal
-              </h3>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-
-                <div className="lg:col-span-2">
-
-                  <label className="block text-sm font-medium text-slate-300 mb-1">
-                    Nombre *
-                  </label>
-
-                  <input
-                    type="text"
-                    value={manualLead.name}
-                    onChange={(e) =>
-                      handleManualChange(
-                        'name',
-                        e.target.value
-                      )
-                    }
-                    placeholder="Nombre de la empresa o contacto"
-                    required
-                    className="w-full bg-slate-800 border border-slate-700 text-white rounded-lg p-2.5 focus:border-blue-500 outline-none"
-                  />
-
-                </div>
-
-                <div>
-
-                  <label className="block text-sm font-medium text-slate-300 mb-1">
-                    Rubro
-                  </label>
-
-                  <input
-                    type="text"
-                    value={manualLead.category}
-                    onChange={(e) =>
-                      handleManualChange(
-                        'category',
-                        e.target.value
-                      )
-                    }
-                    placeholder="Ej: Ferretería"
-                    className="w-full bg-slate-800 border border-slate-700 text-white rounded-lg p-2.5 focus:border-blue-500 outline-none"
-                  />
-
-                </div>
-
-              </div>
-
-            </div>
-
-            {/* UBICACIÓN */}
-
-            <div>
-
-              <h3 className="text-sm font-semibold text-blue-400 uppercase tracking-wide mb-3">
-                Ubicación
-              </h3>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-
-                <div>
-
-                  <label className="block text-sm font-medium text-slate-300 mb-1">
-                    Ciudad
-                  </label>
-
-                  <input
-                    type="text"
-                    value={manualLead.city}
-                    onChange={(e) =>
-                      handleManualChange(
-                        'city',
-                        e.target.value
-                      )
-                    }
-                    placeholder="Ciudad"
-                    className="w-full bg-slate-800 border border-slate-700 text-white rounded-lg p-2.5 focus:border-blue-500 outline-none"
-                  />
-
-                </div>
-
-                <div>
-
-                  <label className="block text-sm font-medium text-slate-300 mb-1">
-                    Provincia
-                  </label>
-
-                  <input
-                    type="text"
-                    value={manualLead.province}
-                    onChange={(e) =>
-                      handleManualChange(
-                        'province',
-                        e.target.value
-                      )
-                    }
-                    placeholder="Provincia"
-                    className="w-full bg-slate-800 border border-slate-700 text-white rounded-lg p-2.5 focus:border-blue-500 outline-none"
-                  />
-
-                </div>
-
-                <div className="md:col-span-2">
-
-                  <label className="block text-sm font-medium text-slate-300 mb-1">
-                    Dirección
-                  </label>
-
-                  <input
-                    type="text"
-                    value={manualLead.address}
-                    onChange={(e) =>
-                      handleManualChange(
-                        'address',
-                        e.target.value
-                      )
-                    }
-                    placeholder="Dirección"
-                    className="w-full bg-slate-800 border border-slate-700 text-white rounded-lg p-2.5 focus:border-blue-500 outline-none"
-                  />
-
-                </div>
-
-                <div>
-
-                  <label className="block text-sm font-medium text-slate-300 mb-1">
-                    Latitud
-                  </label>
-
-                  <input
-                    type="number"
-                    step="any"
-                    value={manualLead.latitude}
-                    onChange={(e) =>
-                      handleManualChange(
-                        'latitude',
-                        e.target.value
-                      )
-                    }
-                    placeholder="-37.84"
-                    className="w-full bg-slate-800 border border-slate-700 text-white rounded-lg p-2.5 focus:border-blue-500 outline-none"
-                  />
-
-                </div>
-
-                <div>
-
-                  <label className="block text-sm font-medium text-slate-300 mb-1">
-                    Longitud
-                  </label>
-
-                  <input
-                    type="number"
-                    step="any"
-                    value={manualLead.longitude}
-                    onChange={(e) =>
-                      handleManualChange(
-                        'longitude',
-                        e.target.value
-                      )
-                    }
-                    placeholder="-58.25"
-                    className="w-full bg-slate-800 border border-slate-700 text-white rounded-lg p-2.5 focus:border-blue-500 outline-none"
-                  />
-
-                </div>
-
-              </div>
-
-            </div>
-
-            {/* CONTACTO */}
-
-            <div>
-
-              <h3 className="text-sm font-semibold text-blue-400 uppercase tracking-wide mb-3">
-                Contacto
-              </h3>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-
-                <div>
-
-                  <label className="block text-sm font-medium text-slate-300 mb-1">
-                    Teléfono
-                  </label>
-
-                  <input
-                    type="text"
-                    value={manualLead.phone}
-                    onChange={(e) =>
-                      handleManualChange(
-                        'phone',
-                        e.target.value
-                      )
-                    }
-                    placeholder="Teléfono"
-                    className="w-full bg-slate-800 border border-slate-700 text-white rounded-lg p-2.5 focus:border-blue-500 outline-none"
-                  />
-
-                </div>
-
-                <div>
-
-                  <label className="block text-sm font-medium text-slate-300 mb-1">
-                    Email
-                  </label>
-
-                  <input
-                    type="email"
-                    value={manualLead.email}
-                    onChange={(e) =>
-                      handleManualChange(
-                        'email',
-                        e.target.value
-                      )
-                    }
-                    placeholder="correo@empresa.com"
-                    className="w-full bg-slate-800 border border-slate-700 text-white rounded-lg p-2.5 focus:border-blue-500 outline-none"
-                  />
-
-                </div>
-
-              </div>
-
-            </div>
-
-            {/* PRESENCIA ONLINE */}
-
-            <div>
-
-              <h3 className="text-sm font-semibold text-blue-400 uppercase tracking-wide mb-3">
-                Presencia online
-              </h3>
-
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-
-                <div>
-
-                  <label className="block text-sm font-medium text-slate-300 mb-1">
-                    Website
-                  </label>
-
-                  <input
-                    type="url"
-                    value={manualLead.website}
-                    onChange={(e) =>
-                      handleManualChange(
-                        'website',
-                        e.target.value
-                      )
-                    }
-                    placeholder="https://..."
-                    className="w-full bg-slate-800 border border-slate-700 text-white rounded-lg p-2.5 focus:border-blue-500 outline-none"
-                  />
-
-                </div>
-
-                <div>
-
-                  <label className="block text-sm font-medium text-slate-300 mb-1">
-                    Facebook
-                  </label>
-
-                  <input
-                    type="url"
-                    value={manualLead.facebook}
-                    onChange={(e) =>
-                      handleManualChange(
-                        'facebook',
-                        e.target.value
-                      )
-                    }
-                    placeholder="https://facebook.com/..."
-                    className="w-full bg-slate-800 border border-slate-700 text-white rounded-lg p-2.5 focus:border-blue-500 outline-none"
-                  />
-
-                </div>
-
-                <div>
-
-                  <label className="block text-sm font-medium text-slate-300 mb-1">
-                    Instagram
-                  </label>
-
-                  <input
-                    type="url"
-                    value={manualLead.instagram}
-                    onChange={(e) =>
-                      handleManualChange(
-                        'instagram',
-                        e.target.value
-                      )
-                    }
-                    placeholder="https://instagram.com/..."
-                    className="w-full bg-slate-800 border border-slate-700 text-white rounded-lg p-2.5 focus:border-blue-500 outline-none"
-                  />
-
-                </div>
-
-              </div>
-
-            </div>
-
-            {/* GESTIÓN */}
-
-            <div>
-
-              <h3 className="text-sm font-semibold text-blue-400 uppercase tracking-wide mb-3">
-                Gestión del lead
-              </h3>
-
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-
-                <div>
-
-                  <label className="block text-sm font-medium text-slate-300 mb-1">
-                    Score
-                  </label>
-
-                  <input
-                    type="number"
-                    min="0"
-                    max="100"
-                    value={manualLead.score}
-                    onChange={(e) =>
-                      handleManualChange(
-                        'score',
-                        e.target.value
-                      )
-                    }
-                    placeholder="0 - 100"
-                    className="w-full bg-slate-800 border border-slate-700 text-white rounded-lg p-2.5 focus:border-blue-500 outline-none"
-                  />
-
-                </div>
-
-                <div>
-
-                  <label className="block text-sm font-medium text-slate-300 mb-1">
-                    Prioridad
-                  </label>
-
-                  <select
-                    value={manualLead.priority}
-                    onChange={(e) =>
-                      handleManualChange(
-                        'priority',
-                        e.target.value
-                      )
-                    }
-                    className="w-full bg-slate-800 border border-slate-700 text-white rounded-lg p-2.5 focus:border-blue-500 outline-none"
-                  >
-                    <option value="">
-                      Sin prioridad
-                    </option>
-
-                    <option value="alta">
-                      Alta
-                    </option>
-
-                    <option value="media">
-                      Media
-                    </option>
-
-                    <option value="baja">
-                      Baja
-                    </option>
-                  </select>
-
-                </div>
-
-                <div>
-
-                  <label className="block text-sm font-medium text-slate-300 mb-1">
-                    Fuente
-                  </label>
-
-                  <input
-                    type="text"
-                    value={manualLead.source}
-                    onChange={(e) =>
-                      handleManualChange(
-                        'source',
-                        e.target.value
-                      )
-                    }
-                    placeholder="manual"
-                    className="w-full bg-slate-800 border border-slate-700 text-white rounded-lg p-2.5 focus:border-blue-500 outline-none"
-                  />
-
-                </div>
-
-              </div>
-
-              <div className="flex flex-wrap gap-6 mt-4">
-
-                <label className="flex items-center gap-2 text-sm text-slate-300 cursor-pointer">
-
-                  <input
-                    type="checkbox"
-                    checked={
-                      manualLead.favorite
-                    }
-                    onChange={(e) =>
-                      handleManualChange(
-                        'favorite',
-                        e.target.checked
-                      )
-                    }
-                    className="w-4 h-4"
-                  />
-
-                  Favorito
-
-                </label>
-
-                <label className="flex items-center gap-2 text-sm text-slate-300 cursor-pointer">
-
-                  <input
-                    type="checkbox"
-                    checked={
-                      manualLead.contacted
-                    }
-                    onChange={(e) =>
-                      handleManualChange(
-                        'contacted',
-                        e.target.checked
-                      )
-                    }
-                    className="w-4 h-4"
-                  />
-
-                  Contactado
-
-                </label>
-
-              </div>
-
-            </div>
-
-            {/* NOTAS */}
-
-            <div>
-
-              <label className="block text-sm font-medium text-slate-300 mb-1">
-                Notas
+              <label className="mb-2 block text-sm font-medium text-slate-300">
+                Buscar en mis leads
               </label>
 
-              <textarea
-                value={manualLead.notes}
-                onChange={(e) =>
-                  handleManualChange(
-                    'notes',
-                    e.target.value
+              <input
+                type="text"
+                value={crmSearch}
+                onChange={(event) =>
+                  setCrmSearch(
+                    event.target.value
                   )
                 }
-                rows={4}
-                placeholder="Información adicional del lead..."
-                className="w-full bg-slate-800 border border-slate-700 text-white rounded-lg p-2.5 focus:border-blue-500 outline-none resize-y"
+                placeholder="Nombre, ciudad, teléfono..."
+                className={inputClasses}
               />
+            </div>
+
+            <div>
+              <label className="mb-2 block text-sm font-medium text-slate-300">
+                Prioridad
+              </label>
+
+              <select
+                value={priorityFilter}
+                onChange={(event) =>
+                  setPriorityFilter(
+                    event.target.value
+                  )
+                }
+                className={inputClasses}
+              >
+                <option value="TODAS">
+                  Todas
+                </option>
+
+                <option value="ALTA">
+                  Alta
+                </option>
+
+                <option value="MEDIA">
+                  Media
+                </option>
+
+                <option value="BAJA">
+                  Baja
+                </option>
+              </select>
+            </div>
+
+            <div>
+              <label className="mb-2 block text-sm font-medium text-slate-300">
+                Estado
+              </label>
+
+              <select
+                value={statusFilter}
+                onChange={(event) =>
+                  setStatusFilter(
+                    event.target.value
+                  )
+                }
+                className={inputClasses}
+              >
+                <option value="TODOS">
+                  Todos
+                </option>
+
+                <option value="NO_CONTACTADOS">
+                  No contactados
+                </option>
+
+                <option value="CONTACTADOS">
+                  Contactados
+                </option>
+
+                <option value="FAVORITOS">
+                  Favoritos
+                </option>
+              </select>
+            </div>
+
+          </div>
+
+        </section>
+
+        {/* ======================================================
+            TABLA CRM
+            ====================================================== */}
+
+        <section className={cardClasses}>
+
+          <div className="border-b border-slate-800 px-5 py-4">
+
+            <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+
+              <h2 className="text-lg font-semibold text-white">
+                Leads guardados
+              </h2>
+
+              <span className="text-sm text-slate-400">
+                Mostrando{" "}
+                {filteredLeads.length}{" "}
+                de {leads.length}
+              </span>
 
             </div>
 
-            {/* BOTONES */}
+          </div>
 
-            <div className="flex flex-col sm:flex-row justify-end gap-3 pt-2 border-t border-slate-800">
+          {loadingLeads ? (
+            <div className="p-10 text-center text-sm text-slate-400">
+              Cargando leads...
+            </div>
+          ) : filteredLeads.length === 0 ? (
+            <div className="p-10 text-center text-sm text-slate-400">
+              No se encontraron leads.
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+
+              <table className="min-w-275">
+
+                <thead className="bg-slate-800">
+
+                  <tr>
+
+                    <th className="px-5 py-3 text-left text-xs font-semibold uppercase text-slate-300">
+                      Lead
+                    </th>
+
+                    <th className="px-5 py-3 text-left text-xs font-semibold uppercase text-slate-300">
+                      Categoría
+                    </th>
+
+                    <th className="px-5 py-3 text-left text-xs font-semibold uppercase text-slate-300">
+                      Ubicación
+                    </th>
+
+                    <th className="px-5 py-3 text-left text-xs font-semibold uppercase text-slate-300">
+                      Contacto
+                    </th>
+
+                    <th className="px-5 py-3 text-left text-xs font-semibold uppercase text-slate-300">
+                      Score
+                    </th>
+
+                    <th className="px-5 py-3 text-left text-xs font-semibold uppercase text-slate-300">
+                      Prioridad
+                    </th>
+
+                    <th className="px-5 py-3 text-left text-xs font-semibold uppercase text-slate-300">
+                      Estado
+                    </th>
+
+                    <th className="px-5 py-3 text-right text-xs font-semibold uppercase text-slate-300">
+                      Acciones
+                    </th>
+
+                  </tr>
+
+                </thead>
+
+                <tbody className="divide-y divide-slate-800">
+
+                  {filteredLeads.map(
+                    (lead) => (
+                      <tr
+                        key={lead.id}
+                        className="hover:bg-slate-800/50"
+                      >
+
+                        <td className="px-5 py-4">
+
+                          <div className="flex items-center gap-3">
+
+                            <button
+                              type="button"
+                              onClick={() =>
+                                void toggleFavorite(
+                                  lead
+                                )
+                              }
+                              disabled={saving}
+                              className="text-xl text-yellow-400 disabled:opacity-50"
+                              title={
+                                lead.favorite
+                                  ? "Quitar favorito"
+                                  : "Agregar favorito"
+                              }
+                            >
+                              {lead.favorite
+                                ? "★"
+                                : "☆"}
+                            </button>
+
+                            <div>
+
+                              <div className="font-semibold text-white">
+                                {lead.name}
+                              </div>
+
+                              {lead.email && (
+                                <div className="mt-1 text-xs text-slate-500">
+                                  {lead.email}
+                                </div>
+                              )}
+
+                            </div>
+
+                          </div>
+
+                        </td>
+
+                        <td className="px-5 py-4 text-sm text-slate-300">
+                          {lead.category ||
+                            "-"}
+                        </td>
+
+                        <td className="px-5 py-4">
+
+                          <div className="text-sm font-medium text-white">
+                            {lead.city ||
+                              "-"}
+                          </div>
+
+                          {lead.province && (
+                            <div className="text-xs text-slate-500">
+                              {lead.province}
+                            </div>
+                          )}
+
+                        </td>
+
+                        <td className="px-5 py-4">
+
+                          {lead.phone ? (
+                            <a
+                              href={`tel:${lead.phone}`}
+                              className="text-sm font-semibold text-blue-400 hover:underline"
+                            >
+                              {lead.phone}
+                            </a>
+                          ) : (
+                            <span className="text-sm text-slate-600">
+                              -
+                            </span>
+                          )}
+
+                        </td>
+
+                        <td className="px-5 py-4">
+
+                          <span className="font-bold text-white">
+                            {lead.score ??
+                              "-"}
+                          </span>
+
+                          {lead.score !==
+                            null && (
+                            <span className="text-slate-600">
+                              /100
+                            </span>
+                          )}
+
+                        </td>
+
+                        <td className="px-5 py-4">
+
+                          <PriorityBadge
+                            priority={
+                              lead.priority
+                            }
+                          />
+
+                        </td>
+
+                        <td className="px-5 py-4">
+
+                          <button
+                            type="button"
+                            onClick={() =>
+                              void toggleContacted(
+                                lead
+                              )
+                            }
+                            disabled={saving}
+                            className={
+                              lead.contacted
+                                ? "rounded-full bg-green-950 px-3 py-1 text-xs font-semibold text-green-300"
+                                : "rounded-full bg-slate-800 px-3 py-1 text-xs font-semibold text-slate-400"
+                            }
+                          >
+                            {lead.contacted
+                              ? "Contactado"
+                              : "No contactado"}
+                          </button>
+
+                        </td>
+
+                        <td className="px-5 py-4">
+
+                          <div className="flex justify-end gap-2">
+
+                            <button
+                              type="button"
+                              onClick={() =>
+                                openLead(
+                                  lead
+                                )
+                              }
+                              className="rounded-lg border border-slate-700 px-3 py-1.5 text-xs font-medium text-slate-200 hover:bg-slate-800"
+                            >
+                              Ver / Editar
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={() =>
+                                void deleteLead(
+                                  lead
+                                )
+                              }
+                              disabled={
+                                saving
+                              }
+                              className="rounded-lg border border-red-900 px-3 py-1.5 text-xs font-medium text-red-400 hover:bg-red-950 disabled:opacity-50"
+                            >
+                              Eliminar
+                            </button>
+
+                          </div>
+
+                        </td>
+
+                      </tr>
+                    )
+                  )}
+
+                </tbody>
+
+              </table>
+
+            </div>
+          )}
+
+        </section>
+
+      </div>
+
+      {/* ========================================================
+          MODAL
+          ======================================================== */}
+
+      {selectedLead && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
+
+          <div className="max-h-[95vh] w-full max-w-5xl overflow-y-auto rounded-2xl border border-slate-800 bg-slate-900 shadow-2xl">
+
+            <div className="sticky top-0 z-10 flex items-center justify-between border-b border-slate-800 bg-slate-900 px-6 py-4">
+
+              <div>
+
+                <h2 className="text-xl font-bold text-white">
+                  {editing
+                    ? "Editar lead"
+                    : selectedLead.name}
+                </h2>
+
+                <p className="text-sm text-slate-500">
+                  {editing
+                    ? "Modificá los datos y guardá los cambios."
+                    : "Detalle del lead"}
+                </p>
+
+              </div>
 
               <button
                 type="button"
-                onClick={() =>
-                  setManualLead({
-                    ...initialManualLead,
-                  })
-                }
-                disabled={savingManual}
-                className="px-5 py-2.5 rounded-lg border border-slate-700 text-slate-300 hover:bg-slate-800 disabled:opacity-50 transition"
+                onClick={closeLead}
+                className="rounded-lg px-3 py-2 text-2xl text-slate-400 hover:bg-slate-800 hover:text-white"
               >
-                Limpiar
-              </button>
-
-              <button
-                type="submit"
-                disabled={savingManual}
-                className="px-6 py-2.5 rounded-lg bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white font-semibold transition"
-              >
-                {savingManual
-                  ? 'Guardando lead...'
-                  : 'Crear lead'}
+                ×
               </button>
 
             </div>
 
-          </form>
+            <div className="p-6">
+
+              {editing ? (
+                <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
+
+                  <FormField
+                    label="Nombre"
+                    value={form.name}
+                    onChange={(value) =>
+                      updateForm(
+                        "name",
+                        value
+                      )
+                    }
+                    required
+                  />
+
+                  <FormField
+                    label="Categoría"
+                    value={form.category}
+                    onChange={(value) =>
+                      updateForm(
+                        "category",
+                        value
+                      )
+                    }
+                  />
+
+                  <FormField
+                    label="Ciudad"
+                    value={form.city}
+                    onChange={(value) =>
+                      updateForm(
+                        "city",
+                        value
+                      )
+                    }
+                  />
+
+                  <FormField
+                    label="Provincia"
+                    value={form.province}
+                    onChange={(value) =>
+                      updateForm(
+                        "province",
+                        value
+                      )
+                    }
+                  />
+
+                  <FormField
+                    label="Dirección"
+                    value={form.address}
+                    onChange={(value) =>
+                      updateForm(
+                        "address",
+                        value
+                      )
+                    }
+                  />
+
+                  <FormField
+                    label="Teléfono"
+                    value={form.phone}
+                    onChange={(value) =>
+                      updateForm(
+                        "phone",
+                        value
+                      )
+                    }
+                  />
+
+                  <FormField
+                    label="Email"
+                    type="email"
+                    value={form.email}
+                    onChange={(value) =>
+                      updateForm(
+                        "email",
+                        value
+                      )
+                    }
+                  />
+
+                  <FormField
+                    label="Website"
+                    value={form.website}
+                    onChange={(value) =>
+                      updateForm(
+                        "website",
+                        value
+                      )
+                    }
+                  />
+
+                  <FormField
+                    label="Facebook"
+                    value={form.facebook}
+                    onChange={(value) =>
+                      updateForm(
+                        "facebook",
+                        value
+                      )
+                    }
+                  />
+
+                  <FormField
+                    label="Instagram"
+                    value={form.instagram}
+                    onChange={(value) =>
+                      updateForm(
+                        "instagram",
+                        value
+                      )
+                    }
+                  />
+
+                  <FormField
+                    label="Latitud"
+                    type="number"
+                    value={form.latitude}
+                    onChange={(value) =>
+                      updateForm(
+                        "latitude",
+                        value
+                      )
+                    }
+                  />
+
+                  <FormField
+                    label="Longitud"
+                    type="number"
+                    value={form.longitude}
+                    onChange={(value) =>
+                      updateForm(
+                        "longitude",
+                        value
+                      )
+                    }
+                  />
+
+                  <FormField
+                    label="Score"
+                    type="number"
+                    value={form.score}
+                    onChange={(value) =>
+                      updateForm(
+                        "score",
+                        value
+                      )
+                    }
+                  />
+
+                  <div>
+
+                    <label className="mb-2 block text-sm font-semibold text-slate-200">
+                      Prioridad
+                    </label>
+
+                    <select
+                      value={
+                        form.priority
+                      }
+                      onChange={(
+                        event
+                      ) =>
+                        updateForm(
+                          "priority",
+                          event.target.value
+                        )
+                      }
+                      className={inputClasses}
+                    >
+                      <option value="">
+                        Sin prioridad
+                      </option>
+
+                      <option value="ALTA">
+                        Alta
+                      </option>
+
+                      <option value="MEDIA">
+                        Media
+                      </option>
+
+                      <option value="BAJA">
+                        Baja
+                      </option>
+                    </select>
+
+                  </div>
+
+                  <FormField
+                    label="Fuente"
+                    value={form.source}
+                    onChange={(value) =>
+                      updateForm(
+                        "source",
+                        value
+                      )
+                    }
+                  />
+
+                  <div className="md:col-span-2">
+
+                    <label className="mb-2 block text-sm font-semibold text-slate-200">
+                      Notas
+                    </label>
+
+                    <textarea
+                      value={form.notes}
+                      onChange={(
+                        event
+                      ) =>
+                        updateForm(
+                          "notes",
+                          event.target.value
+                        )
+                      }
+                      rows={5}
+                      className={inputClasses}
+                      placeholder="Notas del lead..."
+                    />
+
+                  </div>
+
+                  <div className="flex flex-wrap gap-6 md:col-span-2">
+
+                    <label className="flex cursor-pointer items-center gap-2 text-sm font-medium text-slate-300">
+
+                      <input
+                        type="checkbox"
+                        checked={
+                          form.favorite
+                        }
+                        onChange={(
+                          event
+                        ) =>
+                          updateForm(
+                            "favorite",
+                            event.target.checked
+                          )
+                        }
+                        className="h-4 w-4"
+                      />
+
+                      ⭐ Favorito
+
+                    </label>
+
+                    <label className="flex cursor-pointer items-center gap-2 text-sm font-medium text-slate-300">
+
+                      <input
+                        type="checkbox"
+                        checked={
+                          form.contacted
+                        }
+                        onChange={(
+                          event
+                        ) =>
+                          updateForm(
+                            "contacted",
+                            event.target.checked
+                          )
+                        }
+                        className="h-4 w-4"
+                      />
+
+                      📞 Contactado
+
+                    </label>
+
+                  </div>
+
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+
+                  <DetailItem
+                    label="Nombre"
+                    value={
+                      selectedLead.name
+                    }
+                  />
+
+                  <DetailItem
+                    label="Categoría"
+                    value={
+                      selectedLead.category
+                    }
+                  />
+
+                  <DetailItem
+                    label="Ciudad"
+                    value={
+                      selectedLead.city
+                    }
+                  />
+
+                  <DetailItem
+                    label="Provincia"
+                    value={
+                      selectedLead.province
+                    }
+                  />
+
+                  <DetailItem
+                    label="Dirección"
+                    value={
+                      selectedLead.address
+                    }
+                  />
+
+                  <DetailItem
+                    label="Teléfono"
+                    value={
+                      selectedLead.phone
+                    }
+                  />
+
+                  <DetailItem
+                    label="Email"
+                    value={
+                      selectedLead.email
+                    }
+                  />
+
+                  <DetailItem
+                    label="Website"
+                    value={
+                      selectedLead.website
+                    }
+                  />
+
+                  <DetailItem
+                    label="Facebook"
+                    value={
+                      selectedLead.facebook
+                    }
+                  />
+
+                  <DetailItem
+                    label="Instagram"
+                    value={
+                      selectedLead.instagram
+                    }
+                  />
+
+                  <DetailItem
+                    label="Latitud"
+                    value={
+                      selectedLead.latitude
+                    }
+                  />
+
+                  <DetailItem
+                    label="Longitud"
+                    value={
+                      selectedLead.longitude
+                    }
+                  />
+
+                  <DetailItem
+                    label="Score"
+                    value={
+                      selectedLead.score
+                    }
+                  />
+
+                  <DetailItem
+                    label="Prioridad"
+                    value={
+                      selectedLead.priority
+                    }
+                  />
+
+                  <DetailItem
+                    label="Fuente"
+                    value={
+                      selectedLead.source
+                    }
+                  />
+
+                  <DetailItem
+                    label="Favorito"
+                    value={
+                      selectedLead.favorite
+                        ? "Sí"
+                        : "No"
+                    }
+                  />
+
+                  <DetailItem
+                    label="Contactado"
+                    value={
+                      selectedLead.contacted
+                        ? "Sí"
+                        : "No"
+                    }
+                  />
+
+                  <div className="md:col-span-2">
+
+                    <DetailItem
+                      label="Notas"
+                      value={
+                        selectedLead.notes
+                      }
+                    />
+
+                  </div>
+
+                </div>
+              )}
+
+            </div>
+
+            <div className="flex flex-col-reverse gap-3 border-t border-slate-800 px-6 py-4 sm:flex-row sm:justify-end">
+
+              {editing ? (
+                <>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setEditing(false)
+                    }
+                    disabled={saving}
+                    className="rounded-lg border border-slate-700 px-5 py-2.5 text-sm font-medium text-slate-300 hover:bg-slate-800 disabled:opacity-50"
+                  >
+                    Cancelar
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() =>
+                      void saveEditedLead()
+                    }
+                    disabled={saving}
+                    className="rounded-lg bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-blue-500 disabled:opacity-50"
+                  >
+                    {saving
+                      ? "Guardando..."
+                      : "Guardar cambios"}
+                  </button>
+                </>
+              ) : (
+                <>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      void deleteLead(
+                        selectedLead
+                      )
+                    }
+                    disabled={saving}
+                    className="rounded-lg border border-red-900 px-5 py-2.5 text-sm font-medium text-red-400 hover:bg-red-950 disabled:opacity-50"
+                  >
+                    Eliminar
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setEditing(true)
+                    }
+                    className="rounded-lg bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-blue-500"
+                  >
+                    Editar lead
+                  </button>
+                </>
+              )}
+
+            </div>
+
+          </div>
 
         </div>
       )}
+
+    </div>
+  );
+}
+
+/* ============================================================
+   STAT CARD
+   ============================================================ */
+
+function StatCard({
+  title,
+  value,
+  icon,
+}: {
+  title: string;
+  value: number;
+  icon: string;
+}) {
+  return (
+    <div className="rounded-xl border border-slate-800 bg-slate-900 p-5 shadow-sm">
+
+      <div className="flex items-center justify-between">
+
+        <div>
+
+          <p className="text-sm text-slate-400">
+            {title}
+          </p>
+
+          <p className="mt-2 text-3xl font-bold text-white">
+            {value}
+          </p>
+
+        </div>
+
+        <div className="text-2xl">
+          {icon}
+        </div>
+
+      </div>
+
+    </div>
+  );
+}
+
+/* ============================================================
+   PRIORITY BADGE
+   ============================================================ */
+
+function PriorityBadge({
+  priority,
+}: {
+  priority: string | null;
+}) {
+  const normalized =
+    (priority || "").toUpperCase();
+
+  if (normalized === "ALTA") {
+    return (
+      <span className="inline-flex rounded-full bg-red-950 px-2.5 py-1 text-xs font-semibold text-red-300">
+        ALTA
+      </span>
+    );
+  }
+
+  if (normalized === "MEDIA") {
+    return (
+      <span className="inline-flex rounded-full bg-yellow-950 px-2.5 py-1 text-xs font-semibold text-yellow-300">
+        MEDIA
+      </span>
+    );
+  }
+
+  if (normalized === "BAJA") {
+    return (
+      <span className="inline-flex rounded-full bg-green-950 px-2.5 py-1 text-xs font-semibold text-green-300">
+        BAJA
+      </span>
+    );
+  }
+
+  return (
+    <span className="inline-flex rounded-full bg-slate-800 px-2.5 py-1 text-xs font-semibold text-slate-400">
+      SIN PRIORIDAD
+    </span>
+  );
+}
+
+/* ============================================================
+   FORM FIELD
+   ============================================================ */
+
+function FormField({
+  label,
+  value,
+  onChange,
+  type = "text",
+  required = false,
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  type?: string;
+  required?: boolean;
+}) {
+  return (
+    <div>
+
+      <label className="mb-2 block text-sm font-semibold text-slate-200">
+
+        {label}
+
+        {required && (
+          <span className="ml-1 text-red-500">
+            *
+          </span>
+        )}
+
+      </label>
+
+      <input
+        type={type}
+        value={value}
+        onChange={(event) =>
+          onChange(
+            event.target.value
+          )
+        }
+        className="w-full rounded-lg border border-slate-700 bg-slate-800 px-3 py-2.5 text-sm text-white outline-none placeholder:text-slate-500 focus:border-blue-500 focus:ring-2 focus:ring-blue-900"
+      />
+
+    </div>
+  );
+}
+
+/* ============================================================
+   DETAIL ITEM
+   ============================================================ */
+
+function DetailItem({
+  label,
+  value,
+}: {
+  label: string;
+  value: string | number | boolean | null;
+}) {
+  return (
+    <div className="min-w-0">
+
+      <div className="mb-1 text-xs font-semibold uppercase text-slate-500">
+        {label}
+      </div>
+
+      <div className="wrap-break-word text-sm font-medium text-slate-200">
+
+        {value !== null &&
+        value !== undefined &&
+        value !== ""
+          ? String(value)
+          : "-"}
+
+      </div>
 
     </div>
   );
