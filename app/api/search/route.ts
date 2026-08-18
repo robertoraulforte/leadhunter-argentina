@@ -138,6 +138,26 @@ export async function GET(request: NextRequest) {
         lead.telefono ||
         null,
 
+      website:
+        lead.website ||
+        null,
+
+      facebook:
+        lead.redes?.facebook ||
+        null,
+
+      instagram:
+        lead.redes?.instagram ||
+        null,
+
+      latitude:
+        lead.coordenadas?.lat ??
+        null,
+
+      longitude:
+        lead.coordenadas?.lon ??
+        null,
+
       scoreIA:
         lead.scoreIA ??
         0,

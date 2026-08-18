@@ -10,11 +10,15 @@ interface LeadResult {
   rubro: string;
   email: string | null;
   telefono: string | null;
+  website: string | null;
+  facebook: string | null;
+  instagram: string | null;
+  latitude: number | null;
+  longitude: number | null;
   scoreIA: number;
   prioridad: string;
   fuentes: string[];
 }
-
 interface ManualLeadForm {
   name: string;
   category: string;
@@ -154,6 +158,11 @@ export default function BuscadorLeads() {
           province: lead.provincia,
           phone: lead.telefono,
           email: lead.email,
+          website: lead.website,
+          facebook: lead.facebook,
+          instagram: lead.instagram,
+          latitude: lead.latitude,
+          longitude: lead.longitude,
           score: lead.scoreIA,
           priority: lead.prioridad,
           source: lead.fuentes.join(', '),
@@ -162,7 +171,7 @@ export default function BuscadorLeads() {
 
       const data = await res.json();
 
-      if (data.success) {
+        if (data.success) {
         // Marcamos el resultado de búsqueda como guardado.
         setSavedLeadIds((current) => {
           const next = new Set(current);
@@ -173,9 +182,17 @@ export default function BuscadorLeads() {
         setSuccessMessage(
           `Lead "${lead.nombre}" creado correctamente.`
         );
+      } else {
+        // Si la API rechaza el guardado, permitimos reintentar.
+        savingLeadIdsRef.current.delete(lead.id);
 
-       
+        alert(
+          `No se pudo guardar el lead: ${
+            data.error || 'Intentá nuevamente.'
+          }`
+        );
       }
+
     } catch (err) {
       // Si hubo error de conexión, permitimos volver a intentar.
       savingLeadIdsRef.current.delete(lead.id);
