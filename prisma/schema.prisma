@@ -8,34 +8,25 @@ datasource db {
 }
 
 model Lead {
-  id          String   @id @default(cuid())
-
-  name        String
-  category    String?
-  city        String?
-  province    String?
-  address     String?
-
-  phone       String?
-  email       String?
-  website     String?
-
-  facebook    String?
-  instagram   String?
-
-  latitude    Float?
-  longitude   Float?
-
-  score       Int?
-  priority    String?
-
-  source      String?
-
-  favorite    Boolean  @default(false)
-  contacted   Boolean  @default(false)
-
-  notes       String?
-
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id        String   @id @default(cuid())
+  name      String
+  category  String?
+  city      String?
+  province  String?
+  address   String?
+  phone     String?
+  email     String?
+  website   String?
+  facebook  String?
+  instagram String?
+  latitude  Float?
+  longitude Float?
+  score     Int?
+  priority  String?
+  source    String?
+  favorite  Boolean  @default(false)
+  contacted Boolean  @default(false)
+  notes     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
