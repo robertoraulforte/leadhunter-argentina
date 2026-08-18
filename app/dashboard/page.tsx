@@ -19,6 +19,7 @@ interface LeadResult {
   prioridad: string;
   fuentes: string[];
 }
+
 interface ManualLeadForm {
   name: string;
   category: string;
@@ -62,7 +63,8 @@ const initialManualLead: ManualLeadForm = {
 };
 
 export default function BuscadorLeads() {
-  const [activeTab, setActiveTab] = useState<'search' | 'manual'>('search');
+  const [activeTab, setActiveTab] =
+    useState<'search' | 'manual'>('search');
 
   const [rubro, setRubro] = useState('');
   const [ciudad, setCiudad] = useState('');
@@ -72,65 +74,122 @@ export default function BuscadorLeads() {
   const [loading, setLoading] = useState(false);
   const [searched, setSearched] = useState(false);
 
-  const [savingId, setSavingId] = useState<string | null>(null);
+  const [savingId, setSavingId] =
+    useState<string | null>(null);
 
-  // Leads que ya fueron guardados correctamente durante esta búsqueda.
-  const [savedLeadIds, setSavedLeadIds] = useState<Set<string>>(
-    () => new Set()
-  );
+  const [savedLeadIds, setSavedLeadIds] =
+    useState<Set<string>>(() => new Set());
 
-  // Ref para bloquear inmediatamente dobles clics antes de que React
-  // llegue a actualizar el estado.
-  const savingLeadIdsRef = useRef<Set<string>>(new Set());
+  /*
+   * Ref para bloquear inmediatamente un segundo clic.
+   * No depende de la actualización asincrónica de React.
+   */
+  const savingLeadIdsRef =
+    useRef<Set<string>>(new Set());
 
   const [manualLead, setManualLead] =
-    useState<ManualLeadForm>(initialManualLead);
-  const [savingManual, setSavingManual] = useState(false);
+    useState<ManualLeadForm>({
+      ...initialManualLead,
+    });
 
-  const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [savingManual, setSavingManual] =
+    useState(false);
 
+  const [successMessage, setSuccessMessage] =
+    useState<string | null>(null);
+
+  /*
+   * =========================================================
+   * BUSCAR LEADS
+   * =========================================================
+   */
 
   const handleSearch = async (e: FormEvent) => {
     e.preventDefault();
 
     if (!rubro.trim() || !ciudad.trim()) {
-      alert('Por favor completá el rubro y la ciudad.');
+      alert(
+        'Por favor completá el rubro y la ciudad.'
+      );
       return;
     }
 
     setLoading(true);
     setSearched(true);
     setSuccessMessage(null);
-    
 
-    // Los resultados de una nueva búsqueda empiezan sin leads guardados.
+    /*
+     * Una nueva búsqueda comienza con sus propios
+     * resultados todavía no guardados.
+     */
     setSavedLeadIds(new Set());
     savingLeadIdsRef.current.clear();
 
     try {
+      const params = new URLSearchParams({
+        rubro: rubro.trim(),
+        ciudad: ciudad.trim(),
+        provincia,
+      });
+
       const res = await fetch(
-        `/api/search?rubro=${encodeURIComponent(rubro)}&ciudad=${encodeURIComponent(ciudad)}&provincia=${encodeURIComponent(provincia)}`
+        `/api/search?${params.toString()}`
       );
 
       const data = await res.json();
 
-      if (data.success) {
-        setLeads(data.results);
-      } else {
-        console.error('Error del servidor:', data.error);
+      if (!res.ok || !data.success) {
+        console.error(
+          '[Dashboard] Error del servidor:',
+          data.error
+        );
+
         setLeads([]);
+
+        alert(
+          data.error ||
+            'No se pudieron obtener los leads.'
+        );
+
+        return;
       }
-    } catch (err) {
-      console.error('Error al consultar /api/search:', err);
+
+      setLeads(
+        Array.isArray(data.results)
+          ? data.results
+          : []
+      );
+    } catch (error) {
+      console.error(
+        '[Dashboard] Error al consultar /api/search:',
+        error
+      );
+
       setLeads([]);
+
+      alert(
+        'No se pudo conectar con el servidor de búsqueda.'
+      );
     } finally {
       setLoading(false);
     }
   };
 
-  const handleSaveLead = async (lead: LeadResult) => {
-    // Protección contra doble clic mientras se está guardando
-    // o si el lead ya fue guardado.
+  /*
+   * =========================================================
+   * GUARDAR LEAD DE BÚSQUEDA
+   * =========================================================
+   */
+
+  const handleSaveLead = async (
+    lead: LeadResult
+  ) => {
+    /*
+     * Bloqueamos:
+     *
+     * 1. si ya se está guardando
+     * 2. si ya fue guardado en esta búsqueda
+     */
     if (
       savingLeadIdsRef.current.has(lead.id) ||
       savedLeadIds.has(lead.id)
@@ -138,12 +197,13 @@ export default function BuscadorLeads() {
       return;
     }
 
-    // Bloqueo inmediato. No depende de que React actualice el estado.
+    /*
+     * Bloqueo inmediato contra doble clic.
+     */
     savingLeadIdsRef.current.add(lead.id);
 
     setSavingId(lead.id);
     setSuccessMessage(null);
-    
 
     try {
       const res = await fetch('/api/leads', {
@@ -156,53 +216,119 @@ export default function BuscadorLeads() {
           category: lead.rubro,
           city: lead.ciudad,
           province: lead.provincia,
+
           phone: lead.telefono,
           email: lead.email,
+
           website: lead.website,
           facebook: lead.facebook,
           instagram: lead.instagram,
+
           latitude: lead.latitude,
           longitude: lead.longitude,
+
           score: lead.scoreIA,
           priority: lead.prioridad,
+
           source: lead.fuentes.join(', '),
         }),
       });
 
       const data = await res.json();
 
-        if (data.success) {
-        // Marcamos el resultado de búsqueda como guardado.
+      /*
+       * =====================================================
+       * GUARDADO CORRECTO
+       * =====================================================
+       */
+
+      if (res.ok && data.success) {
         setSavedLeadIds((current) => {
           const next = new Set(current);
+
           next.add(lead.id);
+
           return next;
         });
 
         setSuccessMessage(
           `Lead "${lead.nombre}" creado correctamente.`
         );
-      } else {
-        // Si la API rechaza el guardado, permitimos reintentar.
-        savingLeadIdsRef.current.delete(lead.id);
 
-        alert(
-          `No se pudo guardar el lead: ${
-            data.error || 'Intentá nuevamente.'
-          }`
-        );
+        return;
       }
 
-    } catch (err) {
-      // Si hubo error de conexión, permitimos volver a intentar.
-      savingLeadIdsRef.current.delete(lead.id);
+      /*
+       * =====================================================
+       * DUPLICADO
+       * =====================================================
+       */
 
-      console.error('Error al guardar lead:', err);
-      alert('Error de conexión al guardar el lead.');
+      if (
+        res.status === 409 ||
+        data.duplicate === true
+      ) {
+        /*
+         * Lo dejamos bloqueado para que no se vuelva
+         * a intentar guardar accidentalmente.
+         */
+        setSavedLeadIds((current) => {
+          const next = new Set(current);
+
+          next.add(lead.id);
+
+          return next;
+        });
+
+        alert(
+          `⚠️ El lead "${lead.nombre}" ya existe en el CRM.`
+        );
+
+        return;
+      }
+
+      /*
+       * =====================================================
+       * OTRO ERROR
+       * =====================================================
+       */
+
+      savingLeadIdsRef.current.delete(
+        lead.id
+      );
+
+      alert(
+        `No se pudo guardar el lead: ${
+          data.error ||
+          'Intentá nuevamente.'
+        }`
+      );
+    } catch (error) {
+      /*
+       * Si falla la conexión permitimos reintentar.
+       */
+      savingLeadIdsRef.current.delete(
+        lead.id
+      );
+
+      console.error(
+        '[Dashboard] Error al guardar lead:',
+        error
+      );
+
+      alert(
+        'Error de conexión al guardar el lead.'
+      );
     } finally {
       setSavingId(null);
     }
   };
+
+  /*
+   * =========================================================
+   * CAMBIOS DEL FORMULARIO MANUAL
+   * =========================================================
+   */
 
   const handleManualChange = (
     field: keyof ManualLeadForm,
@@ -214,17 +340,31 @@ export default function BuscadorLeads() {
     }));
   };
 
-  const handleManualSubmit = async (e: FormEvent) => {
+  /*
+   * =========================================================
+   * CREAR LEAD MANUAL
+   * =========================================================
+   */
+
+  const handleManualSubmit = async (
+    e: FormEvent
+  ) => {
     e.preventDefault();
 
     if (!manualLead.name.trim()) {
-      alert('El nombre del lead es obligatorio.');
+      alert(
+        'El nombre del lead es obligatorio.'
+      );
+
+      return;
+    }
+
+    if (savingManual) {
       return;
     }
 
     setSavingManual(true);
     setSuccessMessage(null);
-    
 
     try {
       const res = await fetch('/api/leads', {
@@ -232,36 +372,119 @@ export default function BuscadorLeads() {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify(manualLead),
+        body: JSON.stringify({
+          ...manualLead,
+
+          name: manualLead.name.trim(),
+          category:
+            manualLead.category.trim(),
+          city:
+            manualLead.city.trim(),
+          province:
+            manualLead.province.trim(),
+          address:
+            manualLead.address.trim(),
+          phone:
+            manualLead.phone.trim(),
+          email:
+            manualLead.email.trim(),
+          website:
+            manualLead.website.trim(),
+          facebook:
+            manualLead.facebook.trim(),
+          instagram:
+            manualLead.instagram.trim(),
+          latitude:
+            manualLead.latitude.trim(),
+          longitude:
+            manualLead.longitude.trim(),
+          score:
+            manualLead.score.trim(),
+          priority:
+            manualLead.priority.trim(),
+          source:
+            manualLead.source.trim(),
+          notes:
+            manualLead.notes.trim(),
+        }),
       });
 
       const data = await res.json();
 
-      if (data.success) {
+      /*
+       * =====================================================
+       * CORRECTO
+       * =====================================================
+       */
+
+      if (res.ok && data.success) {
         setSuccessMessage(
           `Lead "${manualLead.name}" creado correctamente.`
         );
-        
-        setManualLead(initialManualLead);
-      } else {
-        alert(
-          `Error al guardar: ${
-            data.error || 'Intentá nuevamente.'
-          }`
-        );
+
+        setManualLead({
+          ...initialManualLead,
+        });
+
+        return;
       }
-    } catch (err) {
-      console.error('Error al guardar lead manual:', err);
-      alert('Error de conexión al guardar el lead.');
+
+      /*
+       * =====================================================
+       * DUPLICADO
+       * =====================================================
+       */
+
+      if (
+        res.status === 409 ||
+        data.duplicate === true
+      ) {
+        alert(
+          `⚠️ El lead "${manualLead.name}" ya existe en el CRM.`
+        );
+
+        return;
+      }
+
+      /*
+       * =====================================================
+       * OTRO ERROR
+       * =====================================================
+       */
+
+      alert(
+        `Error al guardar: ${
+          data.error ||
+          'Intentá nuevamente.'
+        }`
+      );
+    } catch (error) {
+      console.error(
+        '[Dashboard] Error al guardar lead manual:',
+        error
+      );
+
+      alert(
+        'Error de conexión al guardar el lead.'
+      );
     } finally {
       setSavingManual(false);
     }
   };
 
+  /*
+   * =========================================================
+   * RENDER
+   * =========================================================
+   */
+
   return (
     <div className="p-6 max-w-7xl mx-auto space-y-6">
 
-      {/* Encabezado */}
+      {/* =====================================================
+          CABECERA
+          ===================================================== */}
+
       <div>
         <h1 className="text-2xl font-bold text-white">
           Gestión de Leads
@@ -272,11 +495,17 @@ export default function BuscadorLeads() {
         </p>
       </div>
 
-      {/* Navegación */}
+      {/* =====================================================
+          TABS
+          ===================================================== */}
+
       <div className="bg-slate-900 border border-slate-800 rounded-xl p-2 flex gap-2">
+
         <button
           type="button"
-          onClick={() => setActiveTab('search')}
+          onClick={() =>
+            setActiveTab('search')
+          }
           className={`flex-1 md:flex-none px-5 py-2.5 rounded-lg font-medium transition ${
             activeTab === 'search'
               ? 'bg-blue-600 text-white'
@@ -288,7 +517,9 @@ export default function BuscadorLeads() {
 
         <button
           type="button"
-          onClick={() => setActiveTab('manual')}
+          onClick={() =>
+            setActiveTab('manual')
+          }
           className={`flex-1 md:flex-none px-5 py-2.5 rounded-lg font-medium transition ${
             activeTab === 'manual'
               ? 'bg-blue-600 text-white'
@@ -297,11 +528,16 @@ export default function BuscadorLeads() {
         >
           ➕ Cargar lead
         </button>
+
       </div>
 
-      {/* Mensaje de éxito */}
+      {/* =====================================================
+          MENSAJE DE ÉXITO
+          ===================================================== */}
+
       {successMessage && (
         <div className="bg-emerald-950/60 border border-emerald-800 rounded-xl p-4 flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+
           <div>
             <p className="text-emerald-300 font-semibold">
               ✓ {successMessage}
@@ -318,16 +554,20 @@ export default function BuscadorLeads() {
           >
             Ver en CRM
           </a>
+
         </div>
       )}
 
-      {/* ====================================================== */}
-      {/* BUSCAR LEADS                                           */}
-      {/* ====================================================== */}
+      {/* =====================================================
+          TAB BUSCAR
+          ===================================================== */}
 
       {activeTab === 'search' && (
         <>
+          {/* FORMULARIO DE BÚSQUEDA */}
+
           <div className="bg-slate-900 border border-slate-800 rounded-xl p-6 shadow-md">
+
             <h2 className="text-xl font-bold text-white mb-4 flex items-center gap-2">
               🔎 Buscar empresas y leads
             </h2>
@@ -336,6 +576,9 @@ export default function BuscadorLeads() {
               onSubmit={handleSearch}
               className="grid grid-cols-1 md:grid-cols-3 gap-4"
             >
+
+              {/* RUBRO */}
+
               <div>
                 <label className="block text-sm font-medium text-slate-300 mb-1">
                   Rubro
@@ -345,10 +588,14 @@ export default function BuscadorLeads() {
                   type="text"
                   placeholder="Ej: gomería, clínica, ferretería"
                   value={rubro}
-                  onChange={(e) => setRubro(e.target.value)}
+                  onChange={(e) =>
+                    setRubro(e.target.value)
+                  }
                   className="w-full bg-slate-800 border border-slate-700 text-white rounded-lg p-2.5 focus:border-blue-500 outline-none"
                 />
               </div>
+
+              {/* CIUDAD */}
 
               <div>
                 <label className="block text-sm font-medium text-slate-300 mb-1">
@@ -359,10 +606,14 @@ export default function BuscadorLeads() {
                   type="text"
                   placeholder="Ej: Balcarce, Mar del Plata, Córdoba"
                   value={ciudad}
-                  onChange={(e) => setCiudad(e.target.value)}
+                  onChange={(e) =>
+                    setCiudad(e.target.value)
+                  }
                   className="w-full bg-slate-800 border border-slate-700 text-white rounded-lg p-2.5 focus:border-blue-500 outline-none"
                 />
               </div>
+
+              {/* PROVINCIA */}
 
               <div>
                 <label className="block text-sm font-medium text-slate-300 mb-1">
@@ -371,18 +622,37 @@ export default function BuscadorLeads() {
 
                 <select
                   value={provincia}
-                  onChange={(e) => setProvincia(e.target.value)}
+                  onChange={(e) =>
+                    setProvincia(e.target.value)
+                  }
                   className="w-full bg-slate-800 border border-slate-700 text-white rounded-lg p-2.5 focus:border-blue-500 outline-none"
                 >
-                  <option value="todas">Todas</option>
-                  <option value="bsas">Buenos Aires</option>
-                  <option value="caba">CABA</option>
-                  <option value="cordoba">Córdoba</option>
-                  <option value="santa-fe">Santa Fe</option>
+                  <option value="todas">
+                    Todas
+                  </option>
+
+                  <option value="bsas">
+                    Buenos Aires
+                  </option>
+
+                  <option value="caba">
+                    CABA
+                  </option>
+
+                  <option value="cordoba">
+                    Córdoba
+                  </option>
+
+                  <option value="santa-fe">
+                    Santa Fe
+                  </option>
                 </select>
               </div>
 
+              {/* BOTÓN */}
+
               <div className="md:col-span-3 flex justify-end mt-2">
+
                 <button
                   type="submit"
                   disabled={loading}
@@ -392,15 +662,21 @@ export default function BuscadorLeads() {
                     ? 'Consultando pipeline...'
                     : 'Buscar leads'}
                 </button>
+
               </div>
+
             </form>
+
           </div>
 
-          {/* Resultados */}
+          {/* RESULTADOS */}
+
           <div>
+
             <h3 className="text-lg font-semibold text-white mb-4">
               Resultados{' '}
-              {searched && `(${leads.length} leads encontrados)`}
+              {searched &&
+                `(${leads.length} leads encontrados)`}
             </h3>
 
             {loading ? (
@@ -413,8 +689,13 @@ export default function BuscadorLeads() {
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
 
                 {leads.map((lead) => {
-                  const isSaving = savingId === lead.id;
-                  const isSaved = savedLeadIds.has(lead.id);
+                  const isSaving =
+                    savingId === lead.id;
+
+                  const isSaved =
+                    savedLeadIds.has(
+                      lead.id
+                    );
 
                   return (
                     <div
@@ -425,7 +706,9 @@ export default function BuscadorLeads() {
                           : 'border-slate-800 hover:border-blue-500'
                       }`}
                     >
+
                       <div>
+
                         <div className="flex justify-between items-start mb-2 gap-3">
 
                           <h4 className="font-bold text-white text-lg">
@@ -445,39 +728,76 @@ export default function BuscadorLeads() {
                         </div>
 
                         <p className="text-sm text-slate-400 mb-1">
-                          📍 {lead.ciudad}, {lead.provincia}
+                          📍 {lead.ciudad},{' '}
+                          {lead.provincia}
                         </p>
 
                         <p className="text-sm text-slate-300 mb-1">
-                          ✉️ {lead.email || 'No disponible'}
+                          ✉️{' '}
+                          {lead.email ||
+                            'No disponible'}
                         </p>
 
-                        <p className="text-sm text-slate-300 mb-3">
-                          📞 {lead.telefono || 'No disponible'}
+                        <p className="text-sm text-slate-300 mb-1">
+                          📞{' '}
+                          {lead.telefono ||
+                            'No disponible'}
                         </p>
+
+                        {lead.website && (
+                          <p className="text-sm text-slate-300 mb-1 truncate">
+                            🌐 {lead.website}
+                          </p>
+                        )}
+
+                        {(lead.facebook ||
+                          lead.instagram) && (
+                          <p className="text-sm text-slate-300 mb-3">
+                            📱 Redes sociales disponibles
+                          </p>
+                        )}
 
                         <div className="mb-4">
+
                           <span className="text-xs text-slate-500 block mb-1">
                             Fuentes:
                           </span>
 
                           <div className="flex flex-wrap gap-1">
-                            {lead.fuentes.map((fuente, index) => (
-                              <span
-                                key={index}
-                                className="text-xs bg-slate-800 text-slate-300 px-2 py-0.5 rounded border border-slate-700"
-                              >
-                                {fuente}
-                              </span>
-                            ))}
+
+                            {lead.fuentes.map(
+                              (
+                                fuente,
+                                index
+                              ) => (
+                                <span
+                                  key={`${fuente}-${index}`}
+                                  className="text-xs bg-slate-800 text-slate-300 px-2 py-0.5 rounded border border-slate-700"
+                                >
+                                  {fuente}
+                                </span>
+                              )
+                            )}
+
                           </div>
+
                         </div>
+
                       </div>
+
+                      {/* BOTÓN GUARDAR */}
 
                       <button
                         type="button"
-                        onClick={() => handleSaveLead(lead)}
-                        disabled={isSaving || isSaved}
+                        onClick={() =>
+                          handleSaveLead(
+                            lead
+                          )
+                        }
+                        disabled={
+                          isSaving ||
+                          isSaved
+                        }
                         className={`w-full py-2 rounded-lg text-sm font-medium transition border ${
                           isSaved
                             ? 'bg-emerald-950 text-emerald-300 border-emerald-800 cursor-default'
@@ -490,6 +810,7 @@ export default function BuscadorLeads() {
                             ? '✓ Guardado'
                             : 'Guardar lead'}
                       </button>
+
                     </div>
                   );
                 })}
@@ -501,18 +822,20 @@ export default function BuscadorLeads() {
                 Intentá con otra ciudad o rubro.
               </div>
             ) : null}
+
           </div>
         </>
       )}
 
-      {/* ====================================================== */}
-      {/* CARGA MANUAL                                           */}
-      {/* ====================================================== */}
+      {/* =====================================================
+          TAB CARGA MANUAL
+          ===================================================== */}
 
       {activeTab === 'manual' && (
         <div className="bg-slate-900 border border-slate-800 rounded-xl p-6 shadow-md">
 
           <div className="mb-6">
+
             <h2 className="text-xl font-bold text-white">
               ➕ Cargar lead manualmente
             </h2>
@@ -520,6 +843,7 @@ export default function BuscadorLeads() {
             <p className="text-sm text-slate-400 mt-1">
               Completá los datos del prospecto. El nombre es obligatorio.
             </p>
+
           </div>
 
           <form
@@ -527,8 +851,10 @@ export default function BuscadorLeads() {
             className="space-y-6"
           >
 
-            {/* Información principal */}
+            {/* INFORMACIÓN PRINCIPAL */}
+
             <div>
+
               <h3 className="text-sm font-semibold text-blue-400 uppercase tracking-wide mb-3">
                 Información principal
               </h3>
@@ -536,6 +862,7 @@ export default function BuscadorLeads() {
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
 
                 <div className="lg:col-span-2">
+
                   <label className="block text-sm font-medium text-slate-300 mb-1">
                     Nombre *
                   </label>
@@ -544,15 +871,20 @@ export default function BuscadorLeads() {
                     type="text"
                     value={manualLead.name}
                     onChange={(e) =>
-                      handleManualChange('name', e.target.value)
+                      handleManualChange(
+                        'name',
+                        e.target.value
+                      )
                     }
                     placeholder="Nombre de la empresa o contacto"
                     required
                     className="w-full bg-slate-800 border border-slate-700 text-white rounded-lg p-2.5 focus:border-blue-500 outline-none"
                   />
+
                 </div>
 
                 <div>
+
                   <label className="block text-sm font-medium text-slate-300 mb-1">
                     Rubro
                   </label>
@@ -561,18 +893,25 @@ export default function BuscadorLeads() {
                     type="text"
                     value={manualLead.category}
                     onChange={(e) =>
-                      handleManualChange('category', e.target.value)
+                      handleManualChange(
+                        'category',
+                        e.target.value
+                      )
                     }
                     placeholder="Ej: Ferretería"
                     className="w-full bg-slate-800 border border-slate-700 text-white rounded-lg p-2.5 focus:border-blue-500 outline-none"
                   />
+
                 </div>
 
               </div>
+
             </div>
 
-            {/* Ubicación */}
+            {/* UBICACIÓN */}
+
             <div>
+
               <h3 className="text-sm font-semibold text-blue-400 uppercase tracking-wide mb-3">
                 Ubicación
               </h3>
@@ -580,6 +919,7 @@ export default function BuscadorLeads() {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
 
                 <div>
+
                   <label className="block text-sm font-medium text-slate-300 mb-1">
                     Ciudad
                   </label>
@@ -588,14 +928,19 @@ export default function BuscadorLeads() {
                     type="text"
                     value={manualLead.city}
                     onChange={(e) =>
-                      handleManualChange('city', e.target.value)
+                      handleManualChange(
+                        'city',
+                        e.target.value
+                      )
                     }
                     placeholder="Ciudad"
                     className="w-full bg-slate-800 border border-slate-700 text-white rounded-lg p-2.5 focus:border-blue-500 outline-none"
                   />
+
                 </div>
 
                 <div>
+
                   <label className="block text-sm font-medium text-slate-300 mb-1">
                     Provincia
                   </label>
@@ -604,14 +949,19 @@ export default function BuscadorLeads() {
                     type="text"
                     value={manualLead.province}
                     onChange={(e) =>
-                      handleManualChange('province', e.target.value)
+                      handleManualChange(
+                        'province',
+                        e.target.value
+                      )
                     }
                     placeholder="Provincia"
                     className="w-full bg-slate-800 border border-slate-700 text-white rounded-lg p-2.5 focus:border-blue-500 outline-none"
                   />
+
                 </div>
 
                 <div className="md:col-span-2">
+
                   <label className="block text-sm font-medium text-slate-300 mb-1">
                     Dirección
                   </label>
@@ -620,14 +970,19 @@ export default function BuscadorLeads() {
                     type="text"
                     value={manualLead.address}
                     onChange={(e) =>
-                      handleManualChange('address', e.target.value)
+                      handleManualChange(
+                        'address',
+                        e.target.value
+                      )
                     }
                     placeholder="Dirección"
                     className="w-full bg-slate-800 border border-slate-700 text-white rounded-lg p-2.5 focus:border-blue-500 outline-none"
                   />
+
                 </div>
 
                 <div>
+
                   <label className="block text-sm font-medium text-slate-300 mb-1">
                     Latitud
                   </label>
@@ -637,14 +992,19 @@ export default function BuscadorLeads() {
                     step="any"
                     value={manualLead.latitude}
                     onChange={(e) =>
-                      handleManualChange('latitude', e.target.value)
+                      handleManualChange(
+                        'latitude',
+                        e.target.value
+                      )
                     }
                     placeholder="-37.84"
                     className="w-full bg-slate-800 border border-slate-700 text-white rounded-lg p-2.5 focus:border-blue-500 outline-none"
                   />
+
                 </div>
 
                 <div>
+
                   <label className="block text-sm font-medium text-slate-300 mb-1">
                     Longitud
                   </label>
@@ -654,18 +1014,25 @@ export default function BuscadorLeads() {
                     step="any"
                     value={manualLead.longitude}
                     onChange={(e) =>
-                      handleManualChange('longitude', e.target.value)
+                      handleManualChange(
+                        'longitude',
+                        e.target.value
+                      )
                     }
                     placeholder="-58.25"
                     className="w-full bg-slate-800 border border-slate-700 text-white rounded-lg p-2.5 focus:border-blue-500 outline-none"
                   />
+
                 </div>
 
               </div>
+
             </div>
 
-            {/* Contacto */}
+            {/* CONTACTO */}
+
             <div>
+
               <h3 className="text-sm font-semibold text-blue-400 uppercase tracking-wide mb-3">
                 Contacto
               </h3>
@@ -673,6 +1040,7 @@ export default function BuscadorLeads() {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
 
                 <div>
+
                   <label className="block text-sm font-medium text-slate-300 mb-1">
                     Teléfono
                   </label>
@@ -681,14 +1049,19 @@ export default function BuscadorLeads() {
                     type="text"
                     value={manualLead.phone}
                     onChange={(e) =>
-                      handleManualChange('phone', e.target.value)
+                      handleManualChange(
+                        'phone',
+                        e.target.value
+                      )
                     }
                     placeholder="Teléfono"
                     className="w-full bg-slate-800 border border-slate-700 text-white rounded-lg p-2.5 focus:border-blue-500 outline-none"
                   />
+
                 </div>
 
                 <div>
+
                   <label className="block text-sm font-medium text-slate-300 mb-1">
                     Email
                   </label>
@@ -697,18 +1070,25 @@ export default function BuscadorLeads() {
                     type="email"
                     value={manualLead.email}
                     onChange={(e) =>
-                      handleManualChange('email', e.target.value)
+                      handleManualChange(
+                        'email',
+                        e.target.value
+                      )
                     }
                     placeholder="correo@empresa.com"
                     className="w-full bg-slate-800 border border-slate-700 text-white rounded-lg p-2.5 focus:border-blue-500 outline-none"
                   />
+
                 </div>
 
               </div>
+
             </div>
 
-            {/* Presencia online */}
+            {/* PRESENCIA ONLINE */}
+
             <div>
+
               <h3 className="text-sm font-semibold text-blue-400 uppercase tracking-wide mb-3">
                 Presencia online
               </h3>
@@ -716,6 +1096,7 @@ export default function BuscadorLeads() {
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
 
                 <div>
+
                   <label className="block text-sm font-medium text-slate-300 mb-1">
                     Website
                   </label>
@@ -724,14 +1105,19 @@ export default function BuscadorLeads() {
                     type="url"
                     value={manualLead.website}
                     onChange={(e) =>
-                      handleManualChange('website', e.target.value)
+                      handleManualChange(
+                        'website',
+                        e.target.value
+                      )
                     }
                     placeholder="https://..."
                     className="w-full bg-slate-800 border border-slate-700 text-white rounded-lg p-2.5 focus:border-blue-500 outline-none"
                   />
+
                 </div>
 
                 <div>
+
                   <label className="block text-sm font-medium text-slate-300 mb-1">
                     Facebook
                   </label>
@@ -740,14 +1126,19 @@ export default function BuscadorLeads() {
                     type="url"
                     value={manualLead.facebook}
                     onChange={(e) =>
-                      handleManualChange('facebook', e.target.value)
+                      handleManualChange(
+                        'facebook',
+                        e.target.value
+                      )
                     }
                     placeholder="https://facebook.com/..."
                     className="w-full bg-slate-800 border border-slate-700 text-white rounded-lg p-2.5 focus:border-blue-500 outline-none"
                   />
+
                 </div>
 
                 <div>
+
                   <label className="block text-sm font-medium text-slate-300 mb-1">
                     Instagram
                   </label>
@@ -756,18 +1147,25 @@ export default function BuscadorLeads() {
                     type="url"
                     value={manualLead.instagram}
                     onChange={(e) =>
-                      handleManualChange('instagram', e.target.value)
+                      handleManualChange(
+                        'instagram',
+                        e.target.value
+                      )
                     }
                     placeholder="https://instagram.com/..."
                     className="w-full bg-slate-800 border border-slate-700 text-white rounded-lg p-2.5 focus:border-blue-500 outline-none"
                   />
+
                 </div>
 
               </div>
+
             </div>
 
-            {/* Gestión */}
+            {/* GESTIÓN */}
+
             <div>
+
               <h3 className="text-sm font-semibold text-blue-400 uppercase tracking-wide mb-3">
                 Gestión del lead
               </h3>
@@ -775,6 +1173,7 @@ export default function BuscadorLeads() {
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
 
                 <div>
+
                   <label className="block text-sm font-medium text-slate-300 mb-1">
                     Score
                   </label>
@@ -785,14 +1184,19 @@ export default function BuscadorLeads() {
                     max="100"
                     value={manualLead.score}
                     onChange={(e) =>
-                      handleManualChange('score', e.target.value)
+                      handleManualChange(
+                        'score',
+                        e.target.value
+                      )
                     }
                     placeholder="0 - 100"
                     className="w-full bg-slate-800 border border-slate-700 text-white rounded-lg p-2.5 focus:border-blue-500 outline-none"
                   />
+
                 </div>
 
                 <div>
+
                   <label className="block text-sm font-medium text-slate-300 mb-1">
                     Prioridad
                   </label>
@@ -800,18 +1204,34 @@ export default function BuscadorLeads() {
                   <select
                     value={manualLead.priority}
                     onChange={(e) =>
-                      handleManualChange('priority', e.target.value)
+                      handleManualChange(
+                        'priority',
+                        e.target.value
+                      )
                     }
                     className="w-full bg-slate-800 border border-slate-700 text-white rounded-lg p-2.5 focus:border-blue-500 outline-none"
                   >
-                    <option value="">Sin prioridad</option>
-                    <option value="alta">Alta</option>
-                    <option value="media">Media</option>
-                    <option value="baja">Baja</option>
+                    <option value="">
+                      Sin prioridad
+                    </option>
+
+                    <option value="alta">
+                      Alta
+                    </option>
+
+                    <option value="media">
+                      Media
+                    </option>
+
+                    <option value="baja">
+                      Baja
+                    </option>
                   </select>
+
                 </div>
 
                 <div>
+
                   <label className="block text-sm font-medium text-slate-300 mb-1">
                     Fuente
                   </label>
@@ -820,11 +1240,15 @@ export default function BuscadorLeads() {
                     type="text"
                     value={manualLead.source}
                     onChange={(e) =>
-                      handleManualChange('source', e.target.value)
+                      handleManualChange(
+                        'source',
+                        e.target.value
+                      )
                     }
                     placeholder="manual"
                     className="w-full bg-slate-800 border border-slate-700 text-white rounded-lg p-2.5 focus:border-blue-500 outline-none"
                   />
+
                 </div>
 
               </div>
@@ -832,9 +1256,12 @@ export default function BuscadorLeads() {
               <div className="flex flex-wrap gap-6 mt-4">
 
                 <label className="flex items-center gap-2 text-sm text-slate-300 cursor-pointer">
+
                   <input
                     type="checkbox"
-                    checked={manualLead.favorite}
+                    checked={
+                      manualLead.favorite
+                    }
                     onChange={(e) =>
                       handleManualChange(
                         'favorite',
@@ -843,13 +1270,18 @@ export default function BuscadorLeads() {
                     }
                     className="w-4 h-4"
                   />
+
                   Favorito
+
                 </label>
 
                 <label className="flex items-center gap-2 text-sm text-slate-300 cursor-pointer">
+
                   <input
                     type="checkbox"
-                    checked={manualLead.contacted}
+                    checked={
+                      manualLead.contacted
+                    }
                     onChange={(e) =>
                       handleManualChange(
                         'contacted',
@@ -858,14 +1290,19 @@ export default function BuscadorLeads() {
                     }
                     className="w-4 h-4"
                   />
+
                   Contactado
+
                 </label>
 
               </div>
+
             </div>
 
-            {/* Notas */}
+            {/* NOTAS */}
+
             <div>
+
               <label className="block text-sm font-medium text-slate-300 mb-1">
                 Notas
               </label>
@@ -873,20 +1310,29 @@ export default function BuscadorLeads() {
               <textarea
                 value={manualLead.notes}
                 onChange={(e) =>
-                  handleManualChange('notes', e.target.value)
+                  handleManualChange(
+                    'notes',
+                    e.target.value
+                  )
                 }
                 rows={4}
                 placeholder="Información adicional del lead..."
                 className="w-full bg-slate-800 border border-slate-700 text-white rounded-lg p-2.5 focus:border-blue-500 outline-none resize-y"
               />
+
             </div>
 
-            {/* Acciones */}
+            {/* BOTONES */}
+
             <div className="flex flex-col sm:flex-row justify-end gap-3 pt-2 border-t border-slate-800">
 
               <button
                 type="button"
-                onClick={() => setManualLead(initialManualLead)}
+                onClick={() =>
+                  setManualLead({
+                    ...initialManualLead,
+                  })
+                }
                 disabled={savingManual}
                 className="px-5 py-2.5 rounded-lg border border-slate-700 text-slate-300 hover:bg-slate-800 disabled:opacity-50 transition"
               >
@@ -906,8 +1352,10 @@ export default function BuscadorLeads() {
             </div>
 
           </form>
+
         </div>
       )}
+
     </div>
   );
 }
