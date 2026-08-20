@@ -48,7 +48,7 @@ export default function CrmLoginPage() {
   }
 
   return (
-    <main className="min-h-screen bg-slate-950 flex items-center justify-center px-4">
+    <main className="min-h-screen bg-slate-50 text-slate-900 flex items-center justify-center px-4">
       <div className="w-full max-w-md">
         <div className="bg-slate-900 border border-slate-800 rounded-2xl p-8 shadow-xl">
           <div className="text-center mb-8">
@@ -79,8 +79,8 @@ export default function CrmLoginPage() {
                 onChange={(event) => setPassword(event.target.value)}
                 placeholder="Ingresá tu contraseña"
                 disabled={loading}
-                className="w-full rounded-lg bg-slate-800 border border-slate-700 px-4 py-3 text-white outline-none focus:border-blue-500 disabled:opacity-50"
-              />
+                className="w-full rounded-lg bg-white border border-slate-300 px-4 py-3 text-slate-900 outline-none focus:border-blue-500 disabled:opacity-50"/>
+              
             </div>
 
             {error && (
