@@ -172,7 +172,7 @@ export default function DashboardPage() {
      UI
      ---------------------------------------------------------- */
 
-  const [darkMode, setDarkMode] = useState(true);
+  const [darkMode, setDarkMode] = useState(false);
 
   const [error, setError] = useState("");
 
@@ -863,18 +863,20 @@ export default function DashboardPage() {
      ESTILOS
      ============================================================ */
 
-  const cardClasses =
-    "rounded-xl border border-slate-800 bg-slate-900 shadow-sm";
+  const cardClasses = darkMode
+  ? "rounded-xl border border-slate-800 bg-slate-900 shadow-sm"
+  : "rounded-xl border border-slate-200 bg-white shadow-sm";
 
-  const inputClasses =
-    "w-full rounded-lg border border-slate-700 bg-slate-800 px-3 py-2.5 text-sm text-white outline-none placeholder:text-slate-500 focus:border-blue-500 focus:ring-2 focus:ring-blue-900";
+  const inputClasses = darkMode
+  ? "w-full rounded-lg border border-slate-700 bg-slate-800 px-3 py-2.5 text-sm text-white outline-none placeholder:text-slate-500 focus:border-blue-500 focus:ring-2 focus:ring-blue-900"
+  : "w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none placeholder:text-slate-500 focus:border-blue-500 focus:ring-2 focus:ring-blue-100";
 
   /* ============================================================
      RENDER
      ============================================================ */
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 p-4 md:p-6">
+    <div className={darkMode ? "min-h-screen bg-slate-950 text-slate-100 p-4 md:p-6" : "min-h-screen bg-slate-50 text-slate-900 p-4 md:p-6"}>
 
       <div className="mx-auto max-w-[1600px] space-y-6">
 
@@ -888,11 +890,11 @@ export default function DashboardPage() {
           <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
 
             <div>
-              <h1 className="text-3xl font-bold text-white">
+              <h1 className={darkMode ? "text-3xl font-bold text-white" : "text-3xl font-bold text-slate-900"}>
                 LeadHunter Argentina
               </h1>
 
-              <p className="mt-1 text-sm text-slate-400">
+              <p className={darkMode ? "mt-1 text-sm text-slate-400" : "mt-1 text-sm text-slate-500"}>
                 Búsqueda, gestión y seguimiento de leads
                 en un solo lugar.
               </p>
@@ -907,7 +909,7 @@ export default function DashboardPage() {
                     (current) => !current
                   )
                 }
-                className="rounded-lg border border-slate-700 bg-slate-800 px-4 py-2 text-sm font-medium text-slate-200 transition hover:bg-slate-700"
+                className={darkMode ? "rounded-lg border border-slate-700 bg-slate-800 px-4 py-2 text-sm font-medium text-slate-200 transition hover:bg-slate-700" : "rounded-lg border border-slate-300 bg-slate-100 px-4 py-2 text-sm font-medium text-slate-800 transition hover:bg-slate-200"}
               >
                 {darkMode
                   ? "☀️ Modo claro"
@@ -936,7 +938,7 @@ export default function DashboardPage() {
                   void handleLogout()
                 }
                 disabled={saving}
-                className="rounded-lg border border-red-900 bg-slate-900 px-4 py-2 text-sm font-medium text-red-400 transition hover:bg-red-950 disabled:opacity-50"
+                className="rounded-lg border border-red-900 bg-white px-4 py-2 text-sm font-medium text-red-400 transition hover:bg-red-950 disabled:opacity-50"
               >
                 Cerrar sesión
               </button>
@@ -992,11 +994,11 @@ export default function DashboardPage() {
         <section className={`${cardClasses} p-6`}>
 
           <div className="mb-5">
-            <h2 className="text-xl font-bold text-white">
+            <h2 className="text-xl font-bold text-slate-900">
               🔎 Buscar empresas y leads
             </h2>
 
-            <p className="mt-1 text-sm text-slate-400">
+            <p className={darkMode ? "mt-1 text-sm text-slate-400" : "mt-1 text-sm text-slate-500"}>
               Buscá nuevos prospectos y guardalos
               directamente en tu base.
             </p>
@@ -1008,7 +1010,7 @@ export default function DashboardPage() {
           >
 
             <div>
-              <label className="mb-2 block text-sm font-medium text-slate-300">
+              <label className="mb-2 block text-sm font-medium text-slate-700">
                 Rubro
               </label>
 
@@ -1026,7 +1028,7 @@ export default function DashboardPage() {
             </div>
 
             <div>
-              <label className="mb-2 block text-sm font-medium text-slate-300">
+              <label className="mb-2 block text-sm font-medium text-slate-700">
                 Ciudad
               </label>
 
@@ -1044,7 +1046,7 @@ export default function DashboardPage() {
             </div>
 
             <div>
-              <label className="mb-2 block text-sm font-medium text-slate-300">
+              <label className="mb-2 block text-sm font-medium text-slate-700">
                 Provincia
               </label>
 
@@ -1106,11 +1108,11 @@ export default function DashboardPage() {
             <div className="mb-4 flex items-center justify-between">
 
               <div>
-                <h2 className="text-xl font-bold text-white">
+                <h2 className="text-xl font-bold text-slate-900">
                   Resultados de búsqueda
                 </h2>
 
-                <p className="mt-1 text-sm text-slate-400">
+                <p className={darkMode ? "mt-1 text-sm text-slate-400" : "mt-1 text-sm text-slate-500"}>
                   {searchResults.length} leads encontrados
                 </p>
               </div>
@@ -1118,13 +1120,13 @@ export default function DashboardPage() {
             </div>
 
             {searchLoading ? (
-              <div className={`${cardClasses} p-12 text-center text-slate-400`}>
+              <div className={`${cardClasses} p-12 text-center text-slate-500`}>
                 <p className="animate-pulse">
                   Ejecutando motores de búsqueda en paralelo...
                 </p>
               </div>
             ) : searchResults.length === 0 ? (
-              <div className={`${cardClasses} p-12 text-center text-slate-400`}>
+              <div className={`${cardClasses} p-12 text-center text-slate-500`}>
                 No se encontraron leads para esta búsqueda.
               </div>
             ) : (
@@ -1144,10 +1146,10 @@ export default function DashboardPage() {
                     return (
                       <div
                         key={lead.id}
-                        className={`flex flex-col justify-between rounded-xl border bg-slate-900 p-5 ${
+                        className={`flex flex-col justify-between rounded-xl border p-5 ${darkMode ? "bg-slate-900" : "bg-white"} ${
                           isSaved
                             ? "border-emerald-800"
-                            : "border-slate-800 hover:border-blue-700"
+                            : "border-slate-200 hover:border-blue-700"
                         }`}
                       >
 
@@ -1155,7 +1157,7 @@ export default function DashboardPage() {
 
                           <div className="mb-3 flex items-start justify-between gap-3">
 
-                            <h3 className="text-lg font-bold text-white">
+                            <h3 className={darkMode ? "text-lg font-bold text-white" : "text-lg font-bold text-slate-900"}>
                               {lead.nombre}
                             </h3>
 
@@ -1165,22 +1167,22 @@ export default function DashboardPage() {
 
                           </div>
 
-                          <p className="mb-2 text-sm text-slate-400">
+                          <p className="mb-2 text-sm text-slate-500">
                             📍 {lead.ciudad},{" "}
                             {lead.provincia}
                           </p>
 
-                          <p className="mb-2 text-sm text-slate-300">
+                          <p className={darkMode ? "mb-2 text-sm text-slate-300" : "mb-2 text-sm text-slate-700"}>
                             🏷️ {lead.rubro}
                           </p>
 
-                          <p className="mb-2 text-sm text-slate-300">
+                          <p className={darkMode ? "mb-2 text-sm text-slate-300" : "mb-2 text-sm text-slate-700"}>
                             📞{" "}
                             {lead.telefono ||
                               "No disponible"}
                           </p>
 
-                          <p className="mb-4 text-sm text-slate-300">
+                          <p className="mb-4 text-sm text-slate-700">
                             ✉️{" "}
                             {lead.email ||
                               "No disponible"}
@@ -1195,7 +1197,7 @@ export default function DashboardPage() {
                               ) => (
                                 <span
                                   key={`${fuente}-${index}`}
-                                  className="rounded border border-slate-700 bg-slate-800 px-2 py-1 text-xs text-slate-300"
+                                  className="rounded border border-slate-300 bg-slate-100 px-2 py-1 text-xs text-slate-700"
                                 >
                                   {fuente}
                                 </span>
@@ -1247,13 +1249,13 @@ export default function DashboardPage() {
 
         <div className="flex items-center gap-4 py-2">
 
-          <div className="h-px flex-1 bg-slate-800" />
+          <div className="h-px flex-1 bg-slate-100" />
 
           <span className="text-xs font-semibold uppercase tracking-widest text-slate-500">
             Mis Leads
           </span>
 
-          <div className="h-px flex-1 bg-slate-800" />
+          <div className="h-px flex-1 bg-slate-100" />
 
         </div>
 
@@ -1298,7 +1300,7 @@ export default function DashboardPage() {
           <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
 
             <div>
-              <label className="mb-2 block text-sm font-medium text-slate-300">
+              <label className="mb-2 block text-sm font-medium text-slate-700">
                 Buscar en mis leads
               </label>
 
@@ -1316,7 +1318,7 @@ export default function DashboardPage() {
             </div>
 
             <div>
-              <label className="mb-2 block text-sm font-medium text-slate-300">
+              <label className="mb-2 block text-sm font-medium text-slate-700">
                 Prioridad
               </label>
 
@@ -1348,7 +1350,7 @@ export default function DashboardPage() {
             </div>
 
             <div>
-              <label className="mb-2 block text-sm font-medium text-slate-300">
+              <label className="mb-2 block text-sm font-medium text-slate-700">
                 Estado
               </label>
 
@@ -1389,15 +1391,15 @@ export default function DashboardPage() {
 
         <section className={cardClasses}>
 
-          <div className="border-b border-slate-800 px-5 py-4">
+          <div className="border-b border-slate-200 px-5 py-4">
 
             <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
 
-              <h2 className="text-lg font-semibold text-white">
+              <h2 className="text-lg font-semibold text-slate-900">
                 Leads guardados
               </h2>
 
-              <span className="text-sm text-slate-400">
+              <span className="text-sm text-slate-500">
                 Mostrando{" "}
                 {filteredLeads.length}{" "}
                 de {leads.length}
@@ -1408,11 +1410,11 @@ export default function DashboardPage() {
           </div>
 
           {loadingLeads ? (
-            <div className="p-10 text-center text-sm text-slate-400">
+            <div className="p-10 text-center text-sm text-slate-500">
               Cargando leads...
             </div>
           ) : filteredLeads.length === 0 ? (
-            <div className="p-10 text-center text-sm text-slate-400">
+            <div className="p-10 text-center text-sm text-slate-500">
               No se encontraron leads.
             </div>
           ) : (
@@ -1420,39 +1422,39 @@ export default function DashboardPage() {
 
               <table className="min-w-275">
 
-                <thead className="bg-slate-800">
+                <thead className="bg-slate-100">
 
                   <tr>
 
-                    <th className="px-5 py-3 text-left text-xs font-semibold uppercase text-slate-300">
+                    <th className="px-5 py-3 text-left text-xs font-semibold uppercase text-slate-700">
                       Lead
                     </th>
 
-                    <th className="px-5 py-3 text-left text-xs font-semibold uppercase text-slate-300">
+                    <th className="px-5 py-3 text-left text-xs font-semibold uppercase text-slate-700">
                       Categoría
                     </th>
 
-                    <th className="px-5 py-3 text-left text-xs font-semibold uppercase text-slate-300">
+                    <th className="px-5 py-3 text-left text-xs font-semibold uppercase text-slate-700">
                       Ubicación
                     </th>
 
-                    <th className="px-5 py-3 text-left text-xs font-semibold uppercase text-slate-300">
+                    <th className="px-5 py-3 text-left text-xs font-semibold uppercase text-slate-700">
                       Contacto
                     </th>
 
-                    <th className="px-5 py-3 text-left text-xs font-semibold uppercase text-slate-300">
+                    <th className="px-5 py-3 text-left text-xs font-semibold uppercase text-slate-700">
                       Score
                     </th>
 
-                    <th className="px-5 py-3 text-left text-xs font-semibold uppercase text-slate-300">
+                    <th className="px-5 py-3 text-left text-xs font-semibold uppercase text-slate-700">
                       Prioridad
                     </th>
 
-                    <th className="px-5 py-3 text-left text-xs font-semibold uppercase text-slate-300">
+                    <th className="px-5 py-3 text-left text-xs font-semibold uppercase text-slate-700">
                       Estado
                     </th>
 
-                    <th className="px-5 py-3 text-right text-xs font-semibold uppercase text-slate-300">
+                    <th className="px-5 py-3 text-right text-xs font-semibold uppercase text-slate-700">
                       Acciones
                     </th>
 
@@ -1460,13 +1462,13 @@ export default function DashboardPage() {
 
                 </thead>
 
-                <tbody className="divide-y divide-slate-800">
+                <tbody className="divide-y divide-slate-200">
 
                   {filteredLeads.map(
                     (lead) => (
                       <tr
                         key={lead.id}
-                        className="hover:bg-slate-800/50"
+                        className="hover:bg-slate-100/50"
                       >
 
                         <td className="px-5 py-4">
@@ -1495,7 +1497,7 @@ export default function DashboardPage() {
 
                             <div>
 
-                              <div className="font-semibold text-white">
+                              <div className="font-semibold text-slate-900">
                                 {lead.name}
                               </div>
 
@@ -1511,14 +1513,14 @@ export default function DashboardPage() {
 
                         </td>
 
-                        <td className="px-5 py-4 text-sm text-slate-300">
+                        <td className="px-5 py-4 text-sm text-slate-700">
                           {lead.category ||
                             "-"}
                         </td>
 
                         <td className="px-5 py-4">
 
-                          <div className="text-sm font-medium text-white">
+                          <div className="text-sm font-medium text-slate-900">
                             {lead.city ||
                               "-"}
                           </div>
@@ -1541,7 +1543,7 @@ export default function DashboardPage() {
                               {lead.phone}
                             </a>
                           ) : (
-                            <span className="text-sm text-slate-600">
+                            <span className="text-sm text-slate-500">
                               -
                             </span>
                           )}
@@ -1550,14 +1552,14 @@ export default function DashboardPage() {
 
                         <td className="px-5 py-4">
 
-                          <span className="font-bold text-white">
+                          <span className="font-bold text-slate-900">
                             {lead.score ??
                               "-"}
                           </span>
 
                           {lead.score !==
                             null && (
-                            <span className="text-slate-600">
+                            <span className="text-slate-500">
                               /100
                             </span>
                           )}
@@ -1587,7 +1589,7 @@ export default function DashboardPage() {
                             className={
                               lead.contacted
                                 ? "rounded-full bg-green-950 px-3 py-1 text-xs font-semibold text-green-300"
-                                : "rounded-full bg-slate-800 px-3 py-1 text-xs font-semibold text-slate-400"
+                                : "rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-500"
                             }
                           >
                             {lead.contacted
@@ -1608,7 +1610,7 @@ export default function DashboardPage() {
                                   lead
                                 )
                               }
-                              className="rounded-lg border border-slate-700 px-3 py-1.5 text-xs font-medium text-slate-200 hover:bg-slate-800"
+                              className="rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-medium text-slate-800 hover:bg-slate-100"
                             >
                               Ver / Editar
                             </button>
@@ -1652,15 +1654,15 @@ export default function DashboardPage() {
           ======================================================== */}
 
       {selectedLead && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
 
-          <div className="max-h-[95vh] w-full max-w-5xl overflow-y-auto rounded-2xl border border-slate-800 bg-slate-900 shadow-2xl">
+          <div className="max-h-[95vh] w-full max-w-5xl overflow-y-auto rounded-2xl border border-slate-200 bg-white shadow-2xl">
 
-            <div className="sticky top-0 z-10 flex items-center justify-between border-b border-slate-800 bg-slate-900 px-6 py-4">
+            <div className="sticky top-0 z-10 flex items-center justify-between border-b border-slate-200 bg-white px-6 py-4">
 
               <div>
 
-                <h2 className="text-xl font-bold text-white">
+                <h2 className="text-xl font-bold text-slate-900">
                   {editing
                     ? "Editar lead"
                     : selectedLead.name}
@@ -1677,7 +1679,7 @@ export default function DashboardPage() {
               <button
                 type="button"
                 onClick={closeLead}
-                className="rounded-lg px-3 py-2 text-2xl text-slate-400 hover:bg-slate-800 hover:text-white"
+                className="rounded-lg px-3 py-2 text-2xl text-slate-500 hover:bg-slate-100 hover:text-slate-900"
               >
                 ×
               </button>
@@ -1839,7 +1841,7 @@ export default function DashboardPage() {
 
                   <div>
 
-                    <label className="mb-2 block text-sm font-semibold text-slate-200">
+                    <label className="mb-2 block text-sm font-semibold text-slate-800">
                       Prioridad
                     </label>
 
@@ -1889,7 +1891,7 @@ export default function DashboardPage() {
 
                   <div className="md:col-span-2">
 
-                    <label className="mb-2 block text-sm font-semibold text-slate-200">
+                    <label className="mb-2 block text-sm font-semibold text-slate-800">
                       Notas
                     </label>
 
@@ -1912,7 +1914,7 @@ export default function DashboardPage() {
 
                   <div className="flex flex-wrap gap-6 md:col-span-2">
 
-                    <label className="flex cursor-pointer items-center gap-2 text-sm font-medium text-slate-300">
+                    <label className="flex cursor-pointer items-center gap-2 text-sm font-medium text-slate-700">
 
                       <input
                         type="checkbox"
@@ -1934,7 +1936,7 @@ export default function DashboardPage() {
 
                     </label>
 
-                    <label className="flex cursor-pointer items-center gap-2 text-sm font-medium text-slate-300">
+                    <label className="flex cursor-pointer items-center gap-2 text-sm font-medium text-slate-700">
 
                       <input
                         type="checkbox"
@@ -2101,7 +2103,7 @@ export default function DashboardPage() {
 
             </div>
 
-            <div className="flex flex-col-reverse gap-3 border-t border-slate-800 px-6 py-4 sm:flex-row sm:justify-end">
+            <div className="flex flex-col-reverse gap-3 border-t border-slate-200 px-6 py-4 sm:flex-row sm:justify-end">
 
               {editing ? (
                 <>
@@ -2111,7 +2113,7 @@ export default function DashboardPage() {
                       setEditing(false)
                     }
                     disabled={saving}
-                    className="rounded-lg border border-slate-700 px-5 py-2.5 text-sm font-medium text-slate-300 hover:bg-slate-800 disabled:opacity-50"
+                    className="rounded-lg border border-slate-300 px-5 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-100 disabled:opacity-50"
                   >
                     Cancelar
                   </button>
@@ -2122,7 +2124,7 @@ export default function DashboardPage() {
                       void saveEditedLead()
                     }
                     disabled={saving}
-                    className="rounded-lg bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-blue-500 disabled:opacity-50"
+                    className="rounded-lg bg-blue-600 px-5 py-2.5 text-sm font-semibold text-slate-900 hover:bg-blue-500 disabled:opacity-50"
                   >
                     {saving
                       ? "Guardando..."
@@ -2149,7 +2151,7 @@ export default function DashboardPage() {
                     onClick={() =>
                       setEditing(true)
                     }
-                    className="rounded-lg bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-blue-500"
+                    className="rounded-lg bg-blue-600 px-5 py-2.5 text-sm font-semibold text-slate-900 hover:bg-blue-500"
                   >
                     Editar lead
                   </button>
@@ -2181,17 +2183,17 @@ function StatCard({
   icon: string;
 }) {
   return (
-    <div className="rounded-xl border border-slate-800 bg-slate-900 p-5 shadow-sm">
+    <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
 
       <div className="flex items-center justify-between">
 
         <div>
 
-          <p className="text-sm text-slate-400">
+          <p className="text-sm text-slate-500">
             {title}
           </p>
 
-          <p className="mt-2 text-3xl font-bold text-white">
+          <p className="mt-2 text-3xl font-bold text-slate-900">
             {value}
           </p>
 
@@ -2244,7 +2246,7 @@ function PriorityBadge({
   }
 
   return (
-    <span className="inline-flex rounded-full bg-slate-800 px-2.5 py-1 text-xs font-semibold text-slate-400">
+    <span className="inline-flex rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-500">
       SIN PRIORIDAD
     </span>
   );
@@ -2270,7 +2272,7 @@ function FormField({
   return (
     <div>
 
-      <label className="mb-2 block text-sm font-semibold text-slate-200">
+      <label className="mb-2 block text-sm font-semibold text-slate-800">
 
         {label}
 
@@ -2290,7 +2292,7 @@ function FormField({
             event.target.value
           )
         }
-        className="w-full rounded-lg border border-slate-700 bg-slate-800 px-3 py-2.5 text-sm text-white outline-none placeholder:text-slate-500 focus:border-blue-500 focus:ring-2 focus:ring-blue-900"
+        className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none placeholder:text-slate-500 focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
       />
 
     </div>
@@ -2315,7 +2317,7 @@ function DetailItem({
         {label}
       </div>
 
-      <div className="wrap-break-word text-sm font-medium text-slate-200">
+      <div className="wrap-break-word text-sm font-medium text-slate-800">
 
         {value !== null &&
         value !== undefined &&
@@ -2328,3 +2330,13 @@ function DetailItem({
     </div>
   );
 }
+
+
+
+
+
+
+
+
+
+
