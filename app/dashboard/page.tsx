@@ -994,9 +994,12 @@ export default function DashboardPage() {
         <section className={`${cardClasses} p-6`}>
 
           <div className="mb-5">
-            <h2 className="text-xl font-bold text-slate-900">
-              🔎 Buscar empresas y leads
-            </h2>
+            <h2 className={ darkMode
+                ? "text-xl font-bold text-white"
+                : "text-xl font-bold text-slate-900"}
+            >
+            🔎 Buscar empresas y leads
+           </h2>
 
             <p className={darkMode ? "mt-1 text-sm text-slate-400" : "mt-1 text-sm text-slate-500"}>
               Buscá nuevos prospectos y guardalos
@@ -1010,9 +1013,12 @@ export default function DashboardPage() {
           >
 
             <div>
-              <label className="mb-2 block text-sm font-medium text-slate-700">
+              <label className={darkMode
+               ? "mb-2 block text-sm font-medium text-slate-200"
+               : "mb-2 block text-sm font-medium text-slate-700"}
+               >
                 Rubro
-              </label>
+            </label>
 
               <input
                 type="text"
@@ -1027,10 +1033,14 @@ export default function DashboardPage() {
               />
             </div>
 
-            <div>
-              <label className="mb-2 block text-sm font-medium text-slate-700">
+            
+              <div>
+              <label className={darkMode
+               ? "mb-2 block text-sm font-medium text-slate-200"
+               : "mb-2 block text-sm font-medium text-slate-700"}
+               >
                 Ciudad
-              </label>
+            </label>
 
               <input
                 type="text"
@@ -1046,7 +1056,10 @@ export default function DashboardPage() {
             </div>
 
             <div>
-              <label className="mb-2 block text-sm font-medium text-slate-700">
+              <label className={darkMode
+               ? "mb-2 block text-sm font-medium text-slate-200"
+               : "mb-2 block text-sm font-medium text-slate-700"}
+               >
                 Provincia
               </label>
 
@@ -1108,10 +1121,12 @@ export default function DashboardPage() {
             <div className="mb-4 flex items-center justify-between">
 
               <div>
-                <h2 className="text-xl font-bold text-slate-900">
-                  Resultados de búsqueda
+                <h2 className={darkMode
+                    ? "text-xl font-bold text-white"
+                    : "text-xl font-bold text-slate-900"}
+                      >
+                      Resultados de búsqueda
                 </h2>
-
                 <p className={darkMode ? "mt-1 text-sm text-slate-400" : "mt-1 text-sm text-slate-500"}>
                   {searchResults.length} leads encontrados
                 </p>
@@ -1167,10 +1182,13 @@ export default function DashboardPage() {
 
                           </div>
 
-                          <p className="mb-2 text-sm text-slate-500">
-                            📍 {lead.ciudad},{" "}
-                            {lead.provincia}
-                          </p>
+                          <p className={darkMode
+                               ? "mb-2 text-sm text-slate-400"
+                               : "mb-2 text-sm text-slate-500"}
+                                  >
+                                 📍 {lead.ciudad},{" "}
+                                     {lead.provincia}
+                         </p>
 
                           <p className={darkMode ? "mb-2 text-sm text-slate-300" : "mb-2 text-sm text-slate-700"}>
                             🏷️ {lead.rubro}
@@ -1182,12 +1200,11 @@ export default function DashboardPage() {
                               "No disponible"}
                           </p>
 
-                          <p className="mb-4 text-sm text-slate-700">
-                            ✉️{" "}
-                            {lead.email ||
-                              "No disponible"}
-                          </p>
-
+                          <p className={darkMode
+                              ? "mb-4 text-sm text-slate-300"
+                              : "mb-4 text-sm text-slate-700"}
+                            >
+                            </p>
                           <div className="mb-4 flex flex-wrap gap-1">
 
                             {lead.fuentes.map(
@@ -1197,7 +1214,7 @@ export default function DashboardPage() {
                               ) => (
                                 <span
                                   key={`${fuente}-${index}`}
-                                  className="rounded border border-slate-300 bg-slate-100 px-2 py-1 text-xs text-slate-700"
+                                  className="rounded-full border border-blue-800 bg-blue-950 px-2.5 py-1 text-xs font-semibold text-blue-300"
                                 >
                                   {fuente}
                                 </span>
@@ -1300,7 +1317,7 @@ export default function DashboardPage() {
           <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
 
             <div>
-              <label className="mb-2 block text-sm font-medium text-slate-700">
+              <label className={darkMode ? "mb-2 block text-sm font-medium text-slate-200" : "mb-2 block text-sm font-medium text-slate-700"}>
                 Buscar en mis leads
               </label>
 
@@ -1318,7 +1335,7 @@ export default function DashboardPage() {
             </div>
 
             <div>
-              <label className="mb-2 block text-sm font-medium text-slate-700">
+              <label className={darkMode ? "mb-2 block text-sm font-medium text-slate-200" : "mb-2 block text-sm font-medium text-slate-700"}>
                 Prioridad
               </label>
 
@@ -1350,7 +1367,7 @@ export default function DashboardPage() {
             </div>
 
             <div>
-              <label className="mb-2 block text-sm font-medium text-slate-700">
+              <label className={darkMode ? "mb-2 block text-sm font-medium text-slate-200" : "mb-2 block text-sm font-medium text-slate-700"}>
                 Estado
               </label>
 
@@ -1422,7 +1439,7 @@ export default function DashboardPage() {
 
               <table className="min-w-275">
 
-                <thead className="bg-slate-100">
+                <thead className={darkMode ? "bg-slate-800" : "bg-slate-100"}>
 
                   <tr>
 
@@ -1468,7 +1485,7 @@ export default function DashboardPage() {
                     (lead) => (
                       <tr
                         key={lead.id}
-                        className="hover:bg-slate-100/50"
+                        className={darkMode ? "hover:bg-slate-800/50" : "hover:bg-slate-100/50"}
                       >
 
                         <td className="px-5 py-4">
@@ -1497,7 +1514,7 @@ export default function DashboardPage() {
 
                             <div>
 
-                              <div className="font-semibold text-slate-900">
+                              <div className={darkMode ? "font-semibold text-white" : "font-semibold text-slate-900"}>
                                 {lead.name}
                               </div>
 
@@ -1520,7 +1537,7 @@ export default function DashboardPage() {
 
                         <td className="px-5 py-4">
 
-                          <div className="text-sm font-medium text-slate-900">
+                          <div className={darkMode ? "text-sm font-medium text-white" : "text-sm font-medium text-slate-900"}>
                             {lead.city ||
                               "-"}
                           </div>
@@ -1552,7 +1569,7 @@ export default function DashboardPage() {
 
                         <td className="px-5 py-4">
 
-                          <span className="font-bold text-slate-900">
+                          <span className={darkMode ? "font-bold text-white" : "font-bold text-slate-900"}>
                             {lead.score ??
                               "-"}
                           </span>
@@ -1656,13 +1673,13 @@ export default function DashboardPage() {
       {selectedLead && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
 
-          <div className="max-h-[95vh] w-full max-w-5xl overflow-y-auto rounded-2xl border border-slate-200 bg-white shadow-2xl">
+          <div className={darkMode ? "max-h-[95vh] w-full max-w-5xl overflow-y-auto rounded-2xl border border-slate-700 bg-slate-900 shadow-2xl" : "max-h-[95vh] w-full max-w-5xl overflow-y-auto rounded-2xl border border-slate-200 bg-white shadow-2xl"}>
 
-            <div className="sticky top-0 z-10 flex items-center justify-between border-b border-slate-200 bg-white px-6 py-4">
+            <div className={darkMode ? "sticky top-0 z-10 flex items-center justify-between border-b border-slate-700 bg-slate-900 px-6 py-4" : "sticky top-0 z-10 flex items-center justify-between border-b border-slate-200 bg-white px-6 py-4"}>
 
               <div>
 
-                <h2 className="text-xl font-bold text-slate-900">
+                <h2 className={darkMode ? "text-xl font-bold text-white" : "text-xl font-bold text-slate-900"}>
                   {editing
                     ? "Editar lead"
                     : selectedLead.name}
@@ -2330,6 +2347,7 @@ function DetailItem({
     </div>
   );
 }
+
 
 
 
