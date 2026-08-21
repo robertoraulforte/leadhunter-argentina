@@ -76,6 +76,49 @@ type LeadForm = {
   notes: string;
 };
 
+type ManualLeadForm = {
+  name: string;
+  category: string;
+  city: string;
+  province: string;
+  address: string;
+  phone: string;
+  email: string;
+  website: string;
+  facebook: string;
+  instagram: string;
+  latitude: string;
+  longitude: string;
+  score: string;
+  priority: string;
+  source: string;
+  favorite: boolean;
+  contacted: boolean;
+  notes: string;
+};
+
+const INITIAL_MANUAL_LEAD: ManualLeadForm = {
+  name: "",
+  category: "",
+  city: "",
+  province: "",
+  address: "",
+  phone: "",
+  email: "",
+  website: "",
+  facebook: "",
+  instagram: "",
+  latitude: "",
+  longitude: "",
+  score: "",
+  priority: "media",
+  source: "manual",
+  favorite: false,
+  contacted: false,
+  notes: "",
+};
+
+
 type ApiResponse = {
   success: boolean;
   count?: number;
@@ -115,6 +158,7 @@ const EMPTY_FORM: LeadForm = {
 /* ============================================================
    COMPONENTE PRINCIPAL
    ============================================================ */
+
 
 export default function DashboardPage() {
   /* ----------------------------------------------------------
@@ -168,6 +212,13 @@ export default function DashboardPage() {
   const [saving, setSaving] = useState(false);
   const savingRef = useRef(false);
 
+  const [manualLead, setManualLead] =
+  useState<ManualLeadForm>(INITIAL_MANUAL_LEAD);
+
+  const [savingManual, setSavingManual] = useState(false);
+
+  const [activeTab, setActiveTab] =
+  useState<"search" | "manual">("search");
   /* ----------------------------------------------------------
      UI
      ---------------------------------------------------------- */
@@ -382,6 +433,84 @@ export default function DashboardPage() {
       setSavingSearchId(null);
     }
   };
+
+
+  /* ============================================================
+   CARGA MANUAL DE LEAD
+   ============================================================ */
+
+const handleManualChange = (
+  field: keyof ManualLeadForm,
+  value: string | boolean
+) => {
+  setManualLead((current) => ({
+    ...current,
+    [field]: value,
+  }));
+};
+
+const handleManualSubmit = async (e: FormEvent) => {
+  e.preventDefault();
+
+  if (!manualLead.name.trim()) {
+    alert("El nombre del lead es obligatorio.");
+    return;
+  }
+
+  setSavingManual(true);
+  setError("");
+  setSuccessMessage("");
+
+  try {
+    const response = await fetch("/api/leads", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(manualLead),
+    });
+
+    const data: ApiResponse = await response.json();
+
+    if (data.success) {
+      setSuccessMessage(
+        `Lead "${manualLead.name}" creado correctamente.`
+      );
+
+      setManualLead(INITIAL_MANUAL_LEAD);
+
+      // Actualizamos inmediatamente el listado del CRM.
+      await loadLeads();
+
+      return;
+    }
+
+    if (data.duplicate) {
+      alert(
+        `⚠️ El lead "${manualLead.name}" ya existe en el CRM.`
+      );
+
+      await loadLeads();
+    } else {
+      alert(
+        data.error ||
+          "No se pudo guardar el lead."
+      );
+    }
+  } catch (err) {
+    console.error(
+      "[Dashboard] Error guardando lead manual:",
+      err
+    );
+
+    alert(
+      "Error de conexión al guardar el lead."
+    );
+  } finally {
+    setSavingManual(false);
+  }
+};
+
 
   /* ============================================================
      FILTROS CRM
@@ -991,7 +1120,232 @@ export default function DashboardPage() {
             BUSCADOR
             ====================================================== */}
 
-        <section className={`${cardClasses} p-6`}>
+                {/* ======================================================
+            NAVEGACIÓN PRINCIPAL
+            ====================================================== */}
+
+        <div className={`${cardClasses} p-2`}>
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+
+            <button
+              type="button"
+              onClick={() => setActiveTab("search")}
+              className={`rounded-lg px-4 py-3 text-sm font-semibold transition ${
+                activeTab === "search"
+                  ? "bg-blue-600 text-white shadow-sm"
+                  : darkMode
+                    ? "text-slate-300 hover:bg-slate-800"
+                    : "text-slate-600 hover:bg-slate-100"
+              }`}
+            >
+              🔎 Buscar leads
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setActiveTab("manual")}
+              className={`rounded-lg px-4 py-3 text-sm font-semibold transition ${
+                activeTab === "manual"
+                  ? "bg-blue-600 text-white shadow-sm"
+                  : darkMode
+                    ? "text-slate-300 hover:bg-slate-800"
+                    : "text-slate-600 hover:bg-slate-100"
+              }`}
+            >
+              ➕ Cargar lead manualmente
+            </button>
+
+          </div>
+        </div>
+
+        {activeTab === "manual" && (
+          <section className={`${cardClasses} p-6`}>
+
+            <div className="mb-6">
+              <h2 className={darkMode ? "text-xl font-bold text-white" : "text-xl font-bold text-slate-900"}>
+                ➕ Cargar lead manualmente
+              </h2>
+
+              <p className={darkMode ? "mt-1 text-sm text-slate-400" : "mt-1 text-sm text-slate-500"}>
+                Completá los datos del prospecto y guardalo directamente en el CRM.
+              </p>
+            </div>
+
+            <form
+              onSubmit={handleManualSubmit}
+              className="grid grid-cols-1 gap-5 md:grid-cols-2"
+            >
+
+              <FormField
+                label="Nombre"
+                value={manualLead.name}
+                onChange={(value) => handleManualChange("name", value)}
+                required
+              />
+
+              <FormField
+                label="Rubro / Categoría"
+                value={manualLead.category}
+                onChange={(value) => handleManualChange("category", value)}
+              />
+
+              <FormField
+                label="Ciudad"
+                value={manualLead.city}
+                onChange={(value) => handleManualChange("city", value)}
+              />
+
+              <FormField
+                label="Provincia"
+                value={manualLead.province}
+                onChange={(value) => handleManualChange("province", value)}
+              />
+
+              <FormField
+                label="Dirección"
+                value={manualLead.address}
+                onChange={(value) => handleManualChange("address", value)}
+              />
+
+              <FormField
+                label="Teléfono"
+                value={manualLead.phone}
+                onChange={(value) => handleManualChange("phone", value)}
+              />
+
+              <FormField
+                label="Email"
+                type="email"
+                value={manualLead.email}
+                onChange={(value) => handleManualChange("email", value)}
+              />
+
+              <FormField
+                label="Sitio web"
+                value={manualLead.website}
+                onChange={(value) => handleManualChange("website", value)}
+              />
+
+              <FormField
+                label="Facebook"
+                value={manualLead.facebook}
+                onChange={(value) => handleManualChange("facebook", value)}
+              />
+
+              <FormField
+                label="Instagram"
+                value={manualLead.instagram}
+                onChange={(value) => handleManualChange("instagram", value)}
+              />
+
+              <FormField
+                label="Latitud"
+                type="number"
+                value={manualLead.latitude}
+                onChange={(value) => handleManualChange("latitude", value)}
+              />
+
+              <FormField
+                label="Longitud"
+                type="number"
+                value={manualLead.longitude}
+                onChange={(value) => handleManualChange("longitude", value)}
+              />
+
+              <FormField
+                label="Score"
+                type="number"
+                value={manualLead.score}
+                onChange={(value) => handleManualChange("score", value)}
+              />
+
+              <div>
+                <label className={darkMode ? "mb-2 block text-sm font-medium text-slate-200" : "mb-2 block text-sm font-medium text-slate-700"}>
+                  Prioridad
+                </label>
+
+                <select
+                  value={manualLead.priority}
+                  onChange={(event) =>
+                    handleManualChange("priority", event.target.value)
+                  }
+                  className={inputClasses}
+                >
+                  <option value="alta">Alta</option>
+                  <option value="media">Media</option>
+                  <option value="baja">Baja</option>
+                </select>
+              </div>
+
+              <FormField
+                label="Fuente"
+                value={manualLead.source}
+                onChange={(value) => handleManualChange("source", value)}
+              />
+
+              <div className="md:col-span-2">
+
+                <label className={darkMode ? "mb-2 block text-sm font-medium text-slate-200" : "mb-2 block text-sm font-medium text-slate-700"}>
+                  Notas
+                </label>
+
+                <textarea
+                  value={manualLead.notes}
+                  onChange={(event) =>
+                    handleManualChange("notes", event.target.value)
+                  }
+                  rows={4}
+                  placeholder="Notas adicionales sobre el lead..."
+                  className={inputClasses}
+                />
+
+              </div>
+
+              <div className="md:col-span-2 flex flex-wrap gap-6">
+
+                <label className={darkMode ? "flex items-center gap-2 text-sm text-slate-300" : "flex items-center gap-2 text-sm text-slate-700"}>
+                  <input
+                    type="checkbox"
+                    checked={manualLead.favorite}
+                    onChange={(event) =>
+                      handleManualChange("favorite", event.target.checked)
+                    }
+                  />
+                  Favorito
+                </label>
+
+                <label className={darkMode ? "flex items-center gap-2 text-sm text-slate-300" : "flex items-center gap-2 text-sm text-slate-700"}>
+                  <input
+                    type="checkbox"
+                    checked={manualLead.contacted}
+                    onChange={(event) =>
+                      handleManualChange("contacted", event.target.checked)
+                    }
+                  />
+                  Contactado
+                </label>
+
+              </div>
+
+              <div className="md:col-span-2 flex justify-end">
+
+                <button
+                  type="submit"
+                  disabled={savingManual}
+                  className="rounded-lg bg-blue-600 px-6 py-3 font-semibold text-white transition hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {savingManual ? "Guardando..." : "💾 Guardar lead"}
+                </button>
+
+              </div>
+
+            </form>
+
+          </section>
+        )}
+
+        {activeTab === "search" && (
+          <><section className={`${cardClasses} p-6`}>
 
           <div className="mb-5">
             <h2 className={ darkMode
@@ -1260,6 +1614,8 @@ export default function DashboardPage() {
           </section>
         )}
 
+          </>
+        )}
         {/* ======================================================
             SEPARADOR
             ====================================================== */}
@@ -2347,14 +2703,4 @@ function DetailItem({
     </div>
   );
 }
-
-
-
-
-
-
-
-
-
-
 
