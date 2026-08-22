@@ -38,7 +38,7 @@ export default function CrmLoginPage() {
         return;
       }
 
-      window.location.href = "/crm";
+      window.location.href = "/dashboard";
     } catch (error) {
       console.error("Error de login:", error);
       setError("No se pudo conectar con el servidor.");
