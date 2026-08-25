@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import {
   useCallback,
@@ -1005,7 +1005,7 @@ const handleManualSubmit = async (e: FormEvent) => {
      ============================================================ */
 
   return (
-    <div className={darkMode ? "min-h-screen bg-slate-950 text-slate-100 p-4 md:p-6" : "min-h-screen bg-slate-50 text-slate-900 p-4 md:p-6"}>
+    <div className={darkMode ? "min-h-screen bg-slate-950 text-slate-100 p-4 md:p-6 [&_.text-slate-900]:!text-slate-100 [&_.text-slate-800]:!text-slate-200 [&_.text-slate-700]:!text-slate-300 [&_.text-slate-600]:!text-slate-400 [&_.text-black]:!text-slate-100" : "min-h-screen bg-slate-50 text-slate-900 p-4 md:p-6"}>
 
       <div className="mx-auto max-w-[1600px] space-y-6">
 
@@ -1177,6 +1177,7 @@ const handleManualSubmit = async (e: FormEvent) => {
             >
 
               <FormField
+                darkMode={darkMode}
                 label="Nombre"
                 value={manualLead.name}
                 onChange={(value) => handleManualChange("name", value)}
@@ -1184,36 +1185,42 @@ const handleManualSubmit = async (e: FormEvent) => {
               />
 
               <FormField
+                darkMode={darkMode}
                 label="Rubro / Categoría"
                 value={manualLead.category}
                 onChange={(value) => handleManualChange("category", value)}
               />
 
               <FormField
+                darkMode={darkMode}
                 label="Ciudad"
                 value={manualLead.city}
                 onChange={(value) => handleManualChange("city", value)}
               />
 
               <FormField
+                darkMode={darkMode}
                 label="Provincia"
                 value={manualLead.province}
                 onChange={(value) => handleManualChange("province", value)}
               />
 
               <FormField
+                darkMode={darkMode}
                 label="Dirección"
                 value={manualLead.address}
                 onChange={(value) => handleManualChange("address", value)}
               />
 
               <FormField
+                darkMode={darkMode}
                 label="Teléfono"
                 value={manualLead.phone}
                 onChange={(value) => handleManualChange("phone", value)}
               />
 
               <FormField
+                darkMode={darkMode}
                 label="Email"
                 type="email"
                 value={manualLead.email}
@@ -1221,24 +1228,28 @@ const handleManualSubmit = async (e: FormEvent) => {
               />
 
               <FormField
+                darkMode={darkMode}
                 label="Sitio web"
                 value={manualLead.website}
                 onChange={(value) => handleManualChange("website", value)}
               />
 
               <FormField
+                darkMode={darkMode}
                 label="Facebook"
                 value={manualLead.facebook}
                 onChange={(value) => handleManualChange("facebook", value)}
               />
 
               <FormField
+                darkMode={darkMode}
                 label="Instagram"
                 value={manualLead.instagram}
                 onChange={(value) => handleManualChange("instagram", value)}
               />
 
               <FormField
+                darkMode={darkMode}
                 label="Latitud"
                 type="number"
                 value={manualLead.latitude}
@@ -1246,6 +1257,7 @@ const handleManualSubmit = async (e: FormEvent) => {
               />
 
               <FormField
+                darkMode={darkMode}
                 label="Longitud"
                 type="number"
                 value={manualLead.longitude}
@@ -1253,6 +1265,7 @@ const handleManualSubmit = async (e: FormEvent) => {
               />
 
               <FormField
+                darkMode={darkMode}
                 label="Score"
                 type="number"
                 value={manualLead.score}
@@ -1278,6 +1291,7 @@ const handleManualSubmit = async (e: FormEvent) => {
               </div>
 
               <FormField
+                darkMode={darkMode}
                 label="Fuente"
                 value={manualLead.source}
                 onChange={(value) => handleManualChange("source", value)}
@@ -1530,7 +1544,7 @@ const handleManualSubmit = async (e: FormEvent) => {
                               {lead.nombre}
                             </h3>
 
-                            <span className="shrink-0 rounded-full border border-emerald-800 bg-emerald-950 px-2.5 py-1 text-xs font-semibold text-emerald-300">
+                            <span className={darkMode ? "shrink-0 rounded-full border border-emerald-700 bg-emerald-950 px-2.5 py-1 text-xs font-semibold text-emerald-300" : "shrink-0 rounded-full border border-emerald-300 bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-700"}>
                               {lead.scoreIA}
                             </span>
 
@@ -1568,7 +1582,7 @@ const handleManualSubmit = async (e: FormEvent) => {
                               ) => (
                                 <span
                                   key={`${fuente}-${index}`}
-                                  className="rounded-full border border-blue-800 bg-blue-950 px-2.5 py-1 text-xs font-semibold text-blue-300"
+                                  className={darkMode ? "rounded-full border border-blue-700 bg-blue-950 px-2.5 py-1 text-xs font-semibold text-blue-300" : "rounded-full border border-blue-200 bg-blue-50 px-2.5 py-1 text-xs font-semibold text-blue-700"}
                                 >
                                   {fuente}
                                 </span>
@@ -1592,8 +1606,8 @@ const handleManualSubmit = async (e: FormEvent) => {
                           }
                           className={`w-full rounded-lg border py-2.5 text-sm font-semibold transition ${
                             isSaved
-                              ? "cursor-default border-emerald-800 bg-emerald-950 text-emerald-300"
-                              : "border-blue-800 bg-blue-950 text-blue-300 hover:bg-blue-900 disabled:opacity-50"
+                              ? darkMode ? "cursor-default border-emerald-800 bg-emerald-950 text-emerald-300" : "cursor-default border-emerald-300 bg-emerald-50 text-emerald-700"
+                              : darkMode ? "border-blue-800 bg-blue-950 text-blue-300 hover:bg-blue-900 disabled:opacity-50" : "border-blue-300 bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50"
                           }`}
                         >
                           {isSaving
@@ -2065,6 +2079,7 @@ const handleManualSubmit = async (e: FormEvent) => {
                 <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
 
                   <FormField
+                    darkMode={darkMode}
                     label="Nombre"
                     value={form.name}
                     onChange={(value) =>
@@ -2077,6 +2092,7 @@ const handleManualSubmit = async (e: FormEvent) => {
                   />
 
                   <FormField
+                    darkMode={darkMode}
                     label="Categoría"
                     value={form.category}
                     onChange={(value) =>
@@ -2088,6 +2104,7 @@ const handleManualSubmit = async (e: FormEvent) => {
                   />
 
                   <FormField
+                    darkMode={darkMode}
                     label="Ciudad"
                     value={form.city}
                     onChange={(value) =>
@@ -2099,6 +2116,7 @@ const handleManualSubmit = async (e: FormEvent) => {
                   />
 
                   <FormField
+                    darkMode={darkMode}
                     label="Provincia"
                     value={form.province}
                     onChange={(value) =>
@@ -2110,6 +2128,7 @@ const handleManualSubmit = async (e: FormEvent) => {
                   />
 
                   <FormField
+                    darkMode={darkMode}
                     label="Dirección"
                     value={form.address}
                     onChange={(value) =>
@@ -2121,6 +2140,7 @@ const handleManualSubmit = async (e: FormEvent) => {
                   />
 
                   <FormField
+                    darkMode={darkMode}
                     label="Teléfono"
                     value={form.phone}
                     onChange={(value) =>
@@ -2132,6 +2152,7 @@ const handleManualSubmit = async (e: FormEvent) => {
                   />
 
                   <FormField
+                    darkMode={darkMode}
                     label="Email"
                     type="email"
                     value={form.email}
@@ -2144,6 +2165,7 @@ const handleManualSubmit = async (e: FormEvent) => {
                   />
 
                   <FormField
+                    darkMode={darkMode}
                     label="Website"
                     value={form.website}
                     onChange={(value) =>
@@ -2155,6 +2177,7 @@ const handleManualSubmit = async (e: FormEvent) => {
                   />
 
                   <FormField
+                    darkMode={darkMode}
                     label="Facebook"
                     value={form.facebook}
                     onChange={(value) =>
@@ -2166,6 +2189,7 @@ const handleManualSubmit = async (e: FormEvent) => {
                   />
 
                   <FormField
+                    darkMode={darkMode}
                     label="Instagram"
                     value={form.instagram}
                     onChange={(value) =>
@@ -2177,6 +2201,7 @@ const handleManualSubmit = async (e: FormEvent) => {
                   />
 
                   <FormField
+                    darkMode={darkMode}
                     label="Latitud"
                     type="number"
                     value={form.latitude}
@@ -2189,6 +2214,7 @@ const handleManualSubmit = async (e: FormEvent) => {
                   />
 
                   <FormField
+                    darkMode={darkMode}
                     label="Longitud"
                     type="number"
                     value={form.longitude}
@@ -2201,6 +2227,7 @@ const handleManualSubmit = async (e: FormEvent) => {
                   />
 
                   <FormField
+                    darkMode={darkMode}
                     label="Score"
                     type="number"
                     value={form.score}
@@ -2252,6 +2279,7 @@ const handleManualSubmit = async (e: FormEvent) => {
                   </div>
 
                   <FormField
+                    darkMode={darkMode}
                     label="Fuente"
                     value={form.source}
                     onChange={(value) =>
@@ -2635,17 +2663,19 @@ function FormField({
   onChange,
   type = "text",
   required = false,
+  darkMode = false,
 }: {
   label: string;
   value: string;
   onChange: (value: string) => void;
   type?: string;
   required?: boolean;
+  darkMode?: boolean;
 }) {
   return (
     <div>
 
-      <label className="mb-2 block text-sm font-semibold text-slate-800">
+      <label className={darkMode ? "mb-2 block text-sm font-semibold text-slate-200" : "mb-2 block text-sm font-semibold text-slate-800"}>
 
         {label}
 
@@ -2665,7 +2695,7 @@ function FormField({
             event.target.value
           )
         }
-        className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none placeholder:text-slate-500 focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+        className={darkMode ? "w-full rounded-lg border border-slate-700 bg-slate-800 px-3 py-2.5 text-sm text-slate-100 outline-none placeholder:text-slate-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-900" : "w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none placeholder:text-slate-500 focus:border-blue-500 focus:ring-2 focus:ring-blue-100"}
       />
 
     </div>
