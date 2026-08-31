@@ -1656,24 +1656,28 @@ const handleManualSubmit = async (e: FormEvent) => {
             title="Total de leads"
             value={stats.total}
             icon="👥"
+            darkMode={darkMode}
           />
 
           <StatCard
             title="Prioridad alta"
             value={stats.alta}
             icon="🔥"
+            darkMode={darkMode}
           />
 
           <StatCard
             title="Contactados"
             value={stats.contactados}
             icon="📞"
+            darkMode={darkMode}
           />
 
           <StatCard
             title="Favoritos"
             value={stats.favoritos}
             icon="⭐"
+            darkMode={darkMode}
           />
 
         </section>
@@ -2578,38 +2582,51 @@ function StatCard({
   title,
   value,
   icon,
+  darkMode,
 }: {
   title: string;
   value: number;
   icon: string;
+  darkMode: boolean;
 }) {
   return (
-    <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-
+    <div
+      className={
+        darkMode
+          ? "rounded-xl border border-slate-800 bg-slate-900 p-5 shadow-sm"
+          : "rounded-xl border border-slate-200 bg-white p-5 shadow-sm"
+      }
+    >
       <div className="flex items-center justify-between">
-
         <div>
-
-          <p className="text-sm text-slate-500">
+          <p
+            className={
+              darkMode
+                ? "text-sm text-slate-400"
+                : "text-sm text-slate-500"
+            }
+          >
             {title}
           </p>
 
-          <p className="mt-2 text-3xl font-bold text-slate-900">
+          <p
+            className={
+              darkMode
+                ? "mt-2 text-3xl font-bold text-slate-100"
+                : "mt-2 text-3xl font-bold text-slate-900"
+            }
+          >
             {value}
           </p>
-
         </div>
 
         <div className="text-2xl">
           {icon}
         </div>
-
       </div>
-
     </div>
   );
 }
-
 /* ============================================================
    PRIORITY BADGE
    ============================================================ */
