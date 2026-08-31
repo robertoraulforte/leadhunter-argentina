@@ -1005,7 +1005,7 @@ const handleManualSubmit = async (e: FormEvent) => {
      ============================================================ */
 
   return (
-    <div className={darkMode ? "min-h-screen bg-slate-950 text-slate-100 p-4 md:p-6 [&_.text-slate-900]:!text-slate-100 [&_.text-slate-800]:!text-slate-200 [&_.text-slate-700]:!text-slate-300 [&_.text-slate-600]:!text-slate-400 [&_.text-black]:!text-slate-100" : "min-h-screen bg-slate-50 text-slate-900 p-4 md:p-6"}>
+    <div className={darkMode ? "min-h-screen bg-slate-950 text-slate-100 p-4 md:p-6 [&_.text-slate-900]:text-slate-100! [&_.text-slate-800]:text-slate-200! [&_.text-slate-700]:text-slate-300! [&_.text-slate-600]:text-slate-400! [&_.text-black]:text-slate-100!" : "min-h-screen bg-slate-50 text-slate-900 p-4 md:p-6"}>
 
       <div className="mx-auto max-w-[1600px] space-y-6">
 
