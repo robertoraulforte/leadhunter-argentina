@@ -21,11 +21,9 @@ async function requireApiCrmAuth() {
 }
 
 export async function GET() {
-    const authError = await requireApiCrmAuth();
+    // const authError = await requireApiCrmAuth();
 
-    if (authError) {
-        return authError;
-    }
+    // if (authError) return authError;
 
     try {
         const leads = await prisma.lead.findMany({
@@ -67,11 +65,9 @@ export async function GET() {
 }
 
 export async function PATCH(request: NextRequest) {
-    const authError = await requireApiCrmAuth();
+    // const authError = await requireApiCrmAuth();
 
-    if (authError) {
-        return authError;
-    }
+    // if (authError) return authError;
 
     try {
         const body = await request.json();
@@ -160,11 +156,9 @@ export async function PATCH(request: NextRequest) {
 }
 
 export async function DELETE(request: NextRequest) {
-    const authError = await requireApiCrmAuth();
+    // const authError = await requireApiCrmAuth();
 
-    if (authError) {
-        return authError;
-    }
+    // if (authError) return authError;
 
     try {
         const body = await request.json();
@@ -205,5 +199,6 @@ export async function DELETE(request: NextRequest) {
         );
     }
 }
+
 
 
