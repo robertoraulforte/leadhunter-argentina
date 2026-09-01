@@ -29,4 +29,20 @@ model Lead {
   notes     String?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+  followUps FollowUp[]
+}
+model FollowUp {
+  id          String   @id @default(cuid())
+  leadId      String
+  date        DateTime
+  type        String
+  description String
+  completed   Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  lead        Lead     @relation(fields: [leadId], references: [id], onDelete: Cascade)
+
+  @@index([leadId])
+  @@index([date])
 }

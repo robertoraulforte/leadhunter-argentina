@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import {
   useCallback,
@@ -28,6 +28,17 @@ type Lead = {
   favorite: boolean;
   contacted: boolean;
   notes: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+type FollowUp = {
+  id: string;
+  leadId: string;
+  date: string;
+  type: string;
+  description: string;
+  completed: boolean;
   createdAt: string;
   updatedAt: string;
 };
@@ -100,6 +111,15 @@ export default function CRMPage() {
 
   const [darkMode, setDarkMode] = useState(false);
 
+  const [followUps, setFollowUps] = useState<FollowUp[]>([]);
+  const [followUpsLoading, setFollowUpsLoading] = useState(false);
+  const [followUpsSaving, setFollowUpsSaving] = useState(false);
+  const [followUpsError, setFollowUpsError] = useState("");
+
+  const [followUpDate, setFollowUpDate] = useState("");
+  const [followUpType, setFollowUpType] = useState("Llamada");
+  const [followUpDescription, setFollowUpDescription] = useState("");
+
   const loadLeads = useCallback(async () => {
     try {
       setLoading(true);
@@ -139,7 +159,7 @@ export default function CRMPage() {
   /*
    * Carga inicial.
    *
-   * El setState ocurre dentro de callbacks asincrónicos de fetch,
+ * El setState ocurre dentro de callbacks asincrónicos de fetch,
    * no directamente en el cuerpo del efecto.
    */
   useEffect(() => {
@@ -253,11 +273,11 @@ export default function CRMPage() {
     changes: Partial<Lead>
   ) {
     /*
-     * Bloqueo síncrono real.
+ * Bloqueo síncrono real.
      *
-     * setSaving() actualiza la UI de forma asíncrona.
-     * savingRef evita que dos clics extremadamente rápidos
-     * puedan iniciar dos peticiones simultáneas.
+ * setSaving() actualiza la UI de forma asíncrona.
+ * savingRef evita que dos clics extremadamente rápidos
+ * puedan iniciar dos peticiones simultáneas.
      */
     if (savingRef.current) {
       return null;
@@ -321,9 +341,55 @@ export default function CRMPage() {
     }
   }
 
+  async function loadFollowUps(leadId: string) {
+    try {
+      setFollowUpsLoading(true);
+      setFollowUpsError("");
+
+      const response = await fetch(
+        `/api/crm/followups?leadId=${encodeURIComponent(leadId)}`,
+        {
+          method: "GET",
+          cache: "no-store",
+        }
+      );
+
+      const data = await response.json();
+
+      if (!response.ok || !data.success) {
+        throw new Error(
+          data.error || "No se pudieron cargar los seguimientos."
+        );
+      }
+
+      setFollowUps(data.results || []);
+    } catch (err) {
+      console.error(
+        "[CRM] Error cargando seguimientos:",
+        err
+      );
+
+      setFollowUps([]);
+      setFollowUpsError(
+        err instanceof Error
+          ? err.message
+          : "No se pudieron cargar los seguimientos."
+      );
+    } finally {
+      setFollowUpsLoading(false);
+    }
+  }
+
   function openLead(lead: Lead) {
     setSelectedLead(lead);
     setEditing(false);
+    setFollowUps([]);
+    setFollowUpsError("");
+    setFollowUpDate("");
+    setFollowUpType("Llamada");
+    setFollowUpDescription("");
+
+    void loadFollowUps(lead.id);
 
     setForm({
       name: lead.name || "",
@@ -360,6 +426,159 @@ export default function CRMPage() {
     setSelectedLead(null);
     setEditing(false);
     setForm(EMPTY_FORM);
+    setFollowUps([]);
+    setFollowUpsError("");
+    setFollowUpDate("");
+    setFollowUpType("Llamada");
+    setFollowUpDescription("");
+  }
+
+  async function createFollowUp() {
+    if (!selectedLead) return;
+
+    if (!followUpDate) {
+      setFollowUpsError("Seleccion? una fecha para el seguimiento.");
+      return;
+    }
+
+    if (!followUpDescription.trim()) {
+      setFollowUpsError("Ingres? una descripci?n para el seguimiento.");
+      return;
+    }
+
+    try {
+      setFollowUpsSaving(true);
+      setFollowUpsError("");
+
+      const response = await fetch("/api/crm/followups", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          leadId: selectedLead.id,
+          date: followUpDate,
+          type: followUpType,
+          description: followUpDescription.trim(),
+          completed: false,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok || !data.success) {
+        throw new Error(
+          data.error || "No se pudo crear el seguimiento."
+        );
+      }
+
+      setFollowUps((current) => [...current, data.result]);
+      setFollowUpDate("");
+      setFollowUpDescription("");
+    } catch (err) {
+      console.error(
+        "[CRM] Error creando seguimiento:",
+        err
+      );
+
+      setFollowUpsError(
+        err instanceof Error
+          ? err.message
+          : "No se pudo crear el seguimiento."
+      );
+    } finally {
+      setFollowUpsSaving(false);
+    }
+  }
+
+  async function toggleFollowUp(followUp: FollowUp) {
+    try {
+      setFollowUpsSaving(true);
+      setFollowUpsError("");
+
+      const response = await fetch("/api/crm/followups", {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          id: followUp.id,
+          completed: !followUp.completed,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok || !data.success) {
+        throw new Error(
+          data.error || "No se pudo actualizar el seguimiento."
+        );
+      }
+
+      setFollowUps((current) =>
+        current.map((item) =>
+          item.id === followUp.id
+            ? data.result
+            : item
+        )
+      );
+    } catch (err) {
+      console.error(
+        "[CRM] Error actualizando seguimiento:",
+        err
+      );
+
+      setFollowUpsError(
+        err instanceof Error
+          ? err.message
+          : "No se pudo actualizar el seguimiento."
+      );
+    } finally {
+      setFollowUpsSaving(false);
+    }
+  }
+
+  async function deleteFollowUp(followUp: FollowUp) {
+    if (!window.confirm("?Eliminar este seguimiento?")) {
+      return;
+    }
+
+    try {
+      setFollowUpsSaving(true);
+      setFollowUpsError("");
+
+      const response = await fetch(
+        `/api/crm/followups?id=${encodeURIComponent(followUp.id)}`,
+        {
+          method: "DELETE",
+        }
+      );
+
+      const data = await response.json();
+
+      if (!response.ok || !data.success) {
+        throw new Error(
+          data.error || "No se pudo eliminar el seguimiento."
+        );
+      }
+
+      setFollowUps((current) =>
+        current.filter((item) => item.id !== followUp.id)
+      );
+    } catch (err) {
+      console.error(
+        "[CRM] Error eliminando seguimiento:",
+        err
+      );
+
+      setFollowUpsError(
+        err instanceof Error
+          ? err.message
+          : "No se pudo eliminar el seguimiento."
+      );
+    } finally {
+      setFollowUpsSaving(false);
+    }
   }
 
   function updateForm<K extends keyof LeadForm>(
@@ -735,7 +954,7 @@ export default function CRMPage() {
               onChange={(event) =>
                 setSearch(event.target.value)
               }
-              placeholder="Nombre, ciudad, teléfono..."
+          placeholder="Nombre, ciudad, teléfono..."
               className={inputClasses}
             />
           </div>
@@ -861,11 +1080,11 @@ export default function CRMPage() {
                   </th>
 
                   <th className="px-5 py-3 text-left text-xs font-semibold uppercase">
-                    Categoría
+              Categoría
                   </th>
 
                   <th className="px-5 py-3 text-left text-xs font-semibold uppercase">
-                    Ubicación
+              Ubicación
                   </th>
 
                   <th className="px-5 py-3 text-left text-xs font-semibold uppercase">
@@ -933,8 +1152,8 @@ export default function CRMPage() {
                           }
                         >
                           {lead.favorite
-                            ? "★"
-                            : "☆"}
+              ? "★"
+              : "☆"}
                         </button>
 
                         <div>
@@ -1136,7 +1355,7 @@ export default function CRMPage() {
 
                 <p className="text-sm opacity-60">
                   {editing
-                    ? "Modificá los datos y guardá los cambios."
+            ? "Modificá los datos y guardá los cambios."
                     : "Detalle del lead"}
                 </p>
               </div>
@@ -1146,7 +1365,7 @@ export default function CRMPage() {
                 onClick={closeLead}
                 className="rounded-lg px-3 py-2 text-2xl opacity-60 hover:bg-gray-500/10"
               >
-                ×
+          ×
               </button>
 
             </div>
@@ -1169,7 +1388,7 @@ export default function CRMPage() {
                   />
 
                   <FormField
-                    label="Categoría"
+        label="Categoría"
                     value={form.category}
                     onChange={(value) =>
                       updateForm("category", value)
@@ -1196,7 +1415,7 @@ export default function CRMPage() {
                   />
 
                   <FormField
-                    label="Dirección"
+        label="Dirección"
                     value={form.address}
                     onChange={(value) =>
                       updateForm("address", value)
@@ -1205,7 +1424,7 @@ export default function CRMPage() {
                   />
 
                   <FormField
-                    label="Teléfono"
+        label="Teléfono"
                     value={form.phone}
                     onChange={(value) =>
                       updateForm("phone", value)
@@ -1362,7 +1581,7 @@ export default function CRMPage() {
                         className="h-4 w-4"
                       />
 
-                      ⭐ Favorito
+                      ✏️ Editar lead
 
                     </label>
 
@@ -1398,7 +1617,7 @@ export default function CRMPage() {
                   />
 
                   <DetailItem
-                    label="Categoría"
+          label="Categoría"
                     value={selectedLead.category}
                   />
 
@@ -1413,12 +1632,12 @@ export default function CRMPage() {
                   />
 
                   <DetailItem
-                    label="Dirección"
+          label="Dirección"
                     value={selectedLead.address}
                   />
 
                   <DetailItem
-                    label="Teléfono"
+          label="Teléfono"
                     value={selectedLead.phone}
                   />
 
@@ -1504,6 +1723,185 @@ export default function CRMPage() {
 
             </div>
 
+            {/* SEGUIMIENTOS */}
+            <div className="px-6 pb-6">
+              <div
+                className={
+                  darkMode
+                    ? "rounded-xl border border-slate-800 bg-slate-900 p-5"
+                    : "rounded-xl border border-slate-200 bg-white p-5"
+                }
+              >
+                <div className="mb-4">
+                  <h3 className="text-lg font-bold">
+                    Seguimientos
+                  </h3>
+                  <p className="mt-1 text-sm opacity-60">
+                    Registrá próximas acciones y marcá las realizadas.
+                  </p>
+                </div>
+
+                <div className="grid gap-3 md:grid-cols-4">
+                  <div>
+                    <label className="mb-1 block text-sm font-medium">
+                      Fecha
+                    </label>
+                    <input
+                      type="date"
+                      value={followUpDate}
+                      onChange={(event) =>
+                        setFollowUpDate(event.target.value)
+                      }
+                      className={inputClasses}
+                    />
+                  </div>
+
+                  <div>
+                    <label className="mb-1 block text-sm font-medium">
+                      Tipo
+                    </label>
+                    <select
+                      value={followUpType}
+                      onChange={(event) =>
+                        setFollowUpType(event.target.value)
+                      }
+                      className={inputClasses}
+                    >
+                      <option value="Llamada">Llamada</option>
+                      <option value="WhatsApp">WhatsApp</option>
+                      <option value="Email">Email</option>
+                      <option value="Reunión">Reunión</option>
+                      <option value="Otro">Otro</option>
+                    </select>
+                  </div>
+
+                  <div className="md:col-span-2">
+                    <label className="mb-1 block text-sm font-medium">
+                      Descripción
+                    </label>
+                    <input
+                      type="text"
+                      value={followUpDescription}
+                      onChange={(event) =>
+                        setFollowUpDescription(event.target.value)
+                      }
+                      className={inputClasses}
+                      placeholder="Ej.: Llamar para ofrecer propuesta"
+                    />
+                  </div>
+                </div>
+
+                <div className="mt-3 flex justify-end">
+                  <button
+                    type="button"
+                    onClick={() => void createFollowUp()}
+                    disabled={followUpsSaving}
+                    className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    {followUpsSaving
+                      ? "Guardando..."
+                      : "Agregar seguimiento"}
+                  </button>
+                </div>
+
+                {followUpsError && (
+                  <div
+                    className={
+                      darkMode
+                        ? "mt-3 rounded-lg border border-red-900 bg-red-950/40 px-3 py-2 text-sm text-red-300"
+                        : "mt-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700"
+                    }
+                  >
+                    {followUpsError}
+                  </div>
+                )}
+
+                <div className="mt-5 space-y-2">
+                  {followUpsLoading ? (
+                    <p className="text-sm opacity-60">
+                      Cargando seguimientos...
+                    </p>
+                  ) : followUps.length === 0 ? (
+                    <p className="text-sm opacity-60">
+                      No hay seguimientos registrados.
+                    </p>
+                  ) : (
+                    followUps.map((followUp) => (
+                      <div
+                        key={followUp.id}
+                        className={
+                          darkMode
+                            ? "flex flex-col gap-3 rounded-lg border border-slate-800 bg-slate-950 p-3 md:flex-row md:items-center md:justify-between"
+                            : "flex flex-col gap-3 rounded-lg border border-slate-200 bg-slate-50 p-3 md:flex-row md:items-center md:justify-between"
+                        }
+                      >
+                        <div className="min-w-0">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className="text-sm font-semibold">
+                              {formatDate(followUp.date)}
+                            </span>
+
+                            <span className="rounded-full bg-blue-100 px-2 py-0.5 text-xs font-medium text-blue-700">
+                              {followUp.type}
+                            </span>
+
+                            {followUp.completed && (
+                              <span className="rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-700">
+                                Completado
+                              </span>
+                            )}
+                          </div>
+
+                          <p
+                            className={
+                              followUp.completed
+                                ? "mt-1 text-sm line-through opacity-50"
+                                : "mt-1 text-sm"
+                            }
+                          >
+                            {followUp.description}
+                          </p>
+                        </div>
+
+                        <div className="flex shrink-0 gap-2">
+                          <button
+                            type="button"
+                            disabled={followUpsSaving}
+                            onClick={() =>
+                              void toggleFollowUp(followUp)
+                            }
+                            className={
+                              darkMode
+                                ? "rounded-lg border border-slate-700 px-3 py-1.5 text-xs font-medium hover:bg-slate-800 disabled:opacity-50"
+                                : "rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-medium hover:bg-white disabled:opacity-50"
+                            }
+                          >
+                            {followUp.completed
+                              ? "Marcar pendiente"
+                              : "Completar"}
+                          </button>
+
+                          <button
+                            type="button"
+                            disabled={followUpsSaving}
+                            onClick={() =>
+                              void deleteFollowUp(followUp)
+                            }
+                            className={
+                              darkMode
+                                ? "rounded-lg border border-red-900 px-3 py-1.5 text-xs font-medium text-red-400 hover:bg-red-950 disabled:opacity-50"
+                                : "rounded-lg border border-red-200 px-3 py-1.5 text-xs font-medium text-red-600 hover:bg-red-50 disabled:opacity-50"
+                            }
+                          >
+                            Eliminar
+                          </button>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+            </div>
             {/* MODAL FOOTER */}
             <div
               className={`flex flex-wrap justify-between gap-3 border-t px-6 py-4 ${
@@ -1530,8 +1928,8 @@ export default function CRMPage() {
                   }
                 >
                   {selectedLead.favorite
-                    ? "★ Quitar favorito"
-                    : "☆ Agregar favorito"}
+                  ? "★ Quitar favorito"
+                  : "☆ Agregar favorito"}
                 </button>
 
                 <button
@@ -1550,7 +1948,7 @@ export default function CRMPage() {
                 >
                   {selectedLead.contacted
                     ? "Marcar no contactado"
-                    : "✓ Marcar contactado"}
+                  : "✓ Marcar contactado"}
                 </button>
 
               </div>
