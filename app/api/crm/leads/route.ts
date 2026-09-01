@@ -1,4 +1,4 @@
-﻿import { NextRequest, NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { isCrmAuthenticated } from "@/lib/crm-auth";
 
@@ -30,9 +30,9 @@ export async function GET() {
     try {
         const leads = await prisma.lead.findMany({
             include: {
-                followups: {
+                followUps: {
                     orderBy: {
-                        scheduledAt: "asc",
+                        createdAt: "asc",
                     },
                 },
             },
@@ -131,9 +131,9 @@ export async function PATCH(request: NextRequest) {
             where: { id },
             data,
             include: {
-                followups: {
+                followUps: {
                     orderBy: {
-                        scheduledAt: "asc",
+                        createdAt: "asc",
                     },
                 },
             },
