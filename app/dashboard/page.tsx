@@ -55,6 +55,17 @@ type Lead = {
   updatedAt: string;
 };
 
+type FollowUp = {
+  id: string;
+  leadId: string;
+  date: string;
+  type: string;
+  description: string;
+  completed: boolean;
+  createdAt: string;
+  updatedAt: string;
+};
+
 type LeadForm = {
   name: string;
   category: string;
@@ -211,6 +222,15 @@ export default function DashboardPage() {
 
   const [saving, setSaving] = useState(false);
   const savingRef = useRef(false);
+
+  const [followUps, setFollowUps] = useState<FollowUp[]>([]);
+  const [followUpsLoading, setFollowUpsLoading] = useState(false);
+  const [followUpsSaving, setFollowUpsSaving] = useState(false);
+  const [followUpsError, setFollowUpsError] = useState("");
+
+  const [followUpDate, setFollowUpDate] = useState("");
+  const [followUpType, setFollowUpType] = useState("Llamada");
+  const [followUpDescription, setFollowUpDescription] = useState("");
 
   const [manualLead, setManualLead] =
   useState<ManualLeadForm>(INITIAL_MANUAL_LEAD);
@@ -681,10 +701,121 @@ const handleManualSubmit = async (e: FormEvent) => {
      ABRIR LEAD
      ============================================================ */
 
+  async function loadFollowUps(leadId: string) {
+    try {
+      setFollowUpsLoading(true);
+      setFollowUpsError("");
+
+      const response = await fetch(
+        `/api/crm/followups?leadId=${encodeURIComponent(leadId)}`,
+        {
+          method: "GET",
+          cache: "no-store",
+        }
+      );
+
+      const data = await response.json();
+
+      if (!response.ok || !data.success) {
+        throw new Error(
+          data.error || "No se pudieron cargar los seguimientos."
+        );
+      }
+
+      setFollowUps(data.results || []);
+    } catch (err) {
+      console.error(
+        "[Dashboard] Error cargando seguimientos:",
+        err
+      );
+
+      setFollowUps([]);
+      setFollowUpsError(
+        err instanceof Error
+          ? err.message
+          : "No se pudieron cargar los seguimientos."
+      );
+    } finally {
+      setFollowUpsLoading(false);
+    }
+  }
+  async function saveFollowUp() {
+    if (!selectedLead) {
+      return;
+    }
+
+    if (!followUpDate.trim()) {
+      setFollowUpsError("La fecha del seguimiento es obligatoria.");
+      return;
+    }
+
+    if (!followUpType.trim()) {
+      setFollowUpsError("El tipo de seguimiento es obligatorio.");
+      return;
+    }
+
+    if (!followUpDescription.trim()) {
+      setFollowUpsError("La descripción del seguimiento es obligatoria.");
+      return;
+    }
+
+    try {
+      setFollowUpsSaving(true);
+      setFollowUpsError("");
+
+      const response = await fetch("/api/crm/followups", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          leadId: selectedLead.id,
+          date: followUpDate,
+          type: followUpType,
+          description: followUpDescription,
+          completed: false,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok || !data.success) {
+        throw new Error(
+          data.error || "No se pudo crear el seguimiento."
+        );
+      }
+
+      setFollowUpDate("");
+      setFollowUpType("Llamada");
+      setFollowUpDescription("");
+
+      await loadFollowUps(selectedLead.id);
+    } catch (err) {
+      console.error(
+        "[Dashboard] Error guardando seguimiento:",
+        err
+      );
+
+      setFollowUpsError(
+        err instanceof Error
+          ? err.message
+          : "No se pudo crear el seguimiento."
+      );
+    } finally {
+      setFollowUpsSaving(false);
+    }
+  }
   function openLead(lead: Lead) {
     setSelectedLead(lead);
     setEditing(false);
     setError("");
+
+    setFollowUps([]);
+    setFollowUpsError("");
+    setFollowUpDate("");
+    setFollowUpType("Llamada");
+    setFollowUpDescription("");
+    void loadFollowUps(lead.id);
 
     setForm({
       name: lead.name || "",
@@ -2500,6 +2631,243 @@ const handleManualSubmit = async (e: FormEvent) => {
                         selectedLead.notes
                       }
                     />
+
+                  </div>
+
+                  <div className="md:col-span-2 mt-2">
+
+                    <div className={
+                      darkMode
+                        ? "rounded-xl border border-slate-700 bg-slate-800 p-4"
+                        : "rounded-xl border border-slate-200 bg-slate-50 p-4"
+                    }>
+
+                      <h3 className={
+                        darkMode
+                          ? "mb-4 text-base font-semibold text-white"
+                          : "mb-4 text-base font-semibold text-slate-900"
+                      }>
+                        📋 Seguimientos
+                      </h3>
+
+                      {followUpsLoading ? (
+
+                        <p className={
+                          darkMode
+                            ? "text-sm text-slate-400"
+                            : "text-sm text-slate-500"
+                        }>
+                          Cargando seguimientos...
+                        </p>
+
+                      ) : followUpsError ? (
+
+                        <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">
+                          {followUpsError}
+                        </p>
+
+                      ) : followUps.length === 0 ? (
+
+                        <p className={
+                          darkMode
+                            ? "text-sm text-slate-400"
+                            : "text-sm text-slate-500"
+                        }>
+                          No hay seguimientos registrados.
+                        </p>
+
+                      ) : (
+
+                        <div className="space-y-3">
+
+                          {followUps.map((followUp) => (
+
+                            <div
+                              key={followUp.id}
+                              className={
+                                darkMode
+                                  ? "rounded-lg border border-slate-700 bg-slate-900 p-4"
+                                  : "rounded-lg border border-slate-200 bg-white p-4"
+                              }
+                            >
+
+                              <div className="flex flex-wrap items-center justify-between gap-2">
+
+                                <span className={
+                                  darkMode
+                                    ? "font-semibold text-white"
+                                    : "font-semibold text-slate-900"
+                                }>
+                                  {followUp.type}
+                                </span>
+
+                                <span className={
+                                  darkMode
+                                    ? "text-sm text-slate-400"
+                                    : "text-sm text-slate-500"
+                                }>
+                                  {new Date(followUp.date).toLocaleString("es-AR")}
+                                </span>
+
+                              </div>
+
+                              <p className={
+                                darkMode
+                                  ? "mt-2 whitespace-pre-wrap text-sm text-slate-300"
+                                  : "mt-2 whitespace-pre-wrap text-sm text-slate-700"
+                              }>
+                                {followUp.description}
+                              </p>
+
+                              {followUp.completed && (
+
+                                <div className="mt-2">
+
+                                  <span className={
+                                    darkMode
+                                      ? "inline-flex rounded-full bg-green-900/40 px-2.5 py-1 text-xs font-semibold text-green-300"
+                                      : "inline-flex rounded-full bg-green-100 px-2.5 py-1 text-xs font-semibold text-green-700"
+                                  }>
+                                    ✓ Completado
+                                  </span>
+
+                                </div>
+
+                              )}
+
+                            </div>
+
+                          ))}
+
+                        </div>
+
+                      )}
+
+                      <div className={
+                        darkMode
+                          ? "mt-6 border-t border-slate-700 pt-5"
+                          : "mt-6 border-t border-slate-200 pt-5"
+                      }>
+
+                        <h4 className={
+                          darkMode
+                            ? "mb-4 text-sm font-semibold text-white"
+                            : "mb-4 text-sm font-semibold text-slate-900"
+                        }>
+                          ➕ Nuevo seguimiento
+                        </h4>
+
+                        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+
+                          <div>
+
+                            <label className={
+                              darkMode
+                                ? "mb-2 block text-sm font-semibold text-slate-200"
+                                : "mb-2 block text-sm font-semibold text-slate-800"
+                            }>
+                              Fecha y hora
+                            </label>
+
+                            <input
+                              type="datetime-local"
+                              value={followUpDate}
+                              onChange={(event) =>
+                                setFollowUpDate(event.target.value)
+                              }
+                              className={inputClasses}
+                            />
+
+                          </div>
+
+                          <div>
+
+                            <label className={
+                              darkMode
+                                ? "mb-2 block text-sm font-semibold text-slate-200"
+                                : "mb-2 block text-sm font-semibold text-slate-800"
+                            }>
+                              Tipo
+                            </label>
+
+                            <select
+                              value={followUpType}
+                              onChange={(event) =>
+                                setFollowUpType(event.target.value)
+                              }
+                              className={inputClasses}
+                            >
+
+                              <option value="Llamada">
+                                📞 Llamada
+                              </option>
+
+                              <option value="WhatsApp">
+                                💬 WhatsApp
+                              </option>
+
+                              <option value="Email">
+                                📧 Email
+                              </option>
+
+                              <option value="Reunión">
+                                🤝 Reunión
+                              </option>
+
+                              <option value="Visita">
+                                📍 Visita
+                              </option>
+
+                              <option value="Otro">
+                                📝 Otro
+                              </option>
+
+                            </select>
+
+                          </div>
+
+                          <div className="md:col-span-2">
+
+                            <label className={
+                              darkMode
+                                ? "mb-2 block text-sm font-semibold text-slate-200"
+                                : "mb-2 block text-sm font-semibold text-slate-800"
+                            }>
+                              Descripción
+                            </label>
+
+                            <textarea
+                              value={followUpDescription}
+                              onChange={(event) =>
+                                setFollowUpDescription(event.target.value)
+                              }
+                              rows={3}
+                              className={inputClasses}
+                              placeholder="¿Qué se habló o qué hay que hacer?"
+                            />
+
+                          </div>
+
+                          <div className="md:col-span-2 flex justify-end">
+
+                            <button
+                              type="button"
+                              onClick={() => void saveFollowUp()}
+                              disabled={followUpsSaving}
+                              className="rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
+                            >
+                              {followUpsSaving
+                                ? "Guardando..."
+                                : "➕ Agregar seguimiento"}
+                            </button>
+
+                          </div>
+
+                        </div>
+
+                      </div>
+
+                    </div>
 
                   </div>
 
