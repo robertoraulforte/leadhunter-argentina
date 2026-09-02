@@ -224,6 +224,7 @@ export default function DashboardPage() {
   const savingRef = useRef(false);
 
   const [followUps, setFollowUps] = useState<FollowUp[]>([]);
+  const [favoriteFollowUps, setFavoriteFollowUps] = useState<FollowUp[]>([]);
   const [followUpsLoading, setFollowUpsLoading] = useState(false);
   const [followUpsSaving, setFollowUpsSaving] = useState(false);
   const [followUpsError, setFollowUpsError] = useState("");
@@ -302,6 +303,10 @@ export default function DashboardPage() {
     window.clearTimeout(timer);
   };
 }, [loadLeads]);
+
+  useEffect(() => {
+    void loadFavoriteFollowUps();
+  }, []);
 
   /* ============================================================
      BUSCAR
@@ -532,7 +537,7 @@ const handleManualSubmit = async (e: FormEvent) => {
 };
 
 
-  /* ============================================================
+          /* ============================================================
      FILTROS CRM
      ============================================================ */
 
@@ -614,6 +619,63 @@ const handleManualSubmit = async (e: FormEvent) => {
       ).length,
     };
   }, [leads]);
+
+  /* ============================================================ */
+
+  const followUpAlerts = useMemo(() => {
+    const now = new Date();
+
+    const startOfToday = new Date(
+      now.getFullYear(),
+      now.getMonth(),
+      now.getDate()
+    );
+
+    const startOfTomorrow = new Date(
+      now.getFullYear(),
+      now.getMonth(),
+      now.getDate() + 1
+    );
+
+    const pendingFollowUps = favoriteFollowUps.filter(
+      (followUp) => !followUp.completed
+    );
+
+    const overdue = pendingFollowUps.filter(
+      (followUp) => new Date(followUp.date) < startOfToday
+    );
+
+    const today = pendingFollowUps.filter((followUp) => {
+      const date = new Date(followUp.date);
+      return date >= startOfToday && date < startOfTomorrow;
+    });
+
+    const upcoming = pendingFollowUps.filter(
+      (followUp) => new Date(followUp.date) >= startOfTomorrow
+    );
+
+    const favoriteLeadIdsWithFollowUps = new Set(
+      favoriteFollowUps.map((followUp) => followUp.leadId)
+    );
+
+    const withoutFollowUp = leads.filter(
+      (lead) =>
+        lead.favorite &&
+        !favoriteLeadIdsWithFollowUps.has(lead.id)
+    );
+
+    return {
+      overdue,
+      today,
+      upcoming,
+      withoutFollowUp,
+      total:
+        overdue.length +
+        today.length +
+        upcoming.length +
+        withoutFollowUp.length,
+    };
+  }, [favoriteFollowUps, leads]);
 
   /* ============================================================
      ACTUALIZAR LEAD
@@ -739,6 +801,36 @@ const handleManualSubmit = async (e: FormEvent) => {
       setFollowUpsLoading(false);
     }
   }
+
+  async function loadFavoriteFollowUps() {
+    try {
+      const response = await fetch(
+        "/api/crm/followups?favorites=true",
+        {
+          method: "GET",
+          cache: "no-store",
+        }
+      );
+
+      const data = await response.json();
+
+      if (!response.ok || !data.success) {
+        throw new Error(
+          data.error || "No se pudieron cargar los seguimientos pendientes."
+        );
+      }
+
+      setFavoriteFollowUps(data.results || []);
+    } catch (err) {
+      console.error(
+        "[Dashboard] Error cargando seguimientos de favoritos:",
+        err
+      );
+
+      setFavoriteFollowUps([]);
+    }
+  }
+
   async function saveFollowUp() {
     if (!selectedLead) {
       return;
@@ -1812,6 +1904,131 @@ const handleManualSubmit = async (e: FormEvent) => {
           />
 
         </section>
+
+{/* ======================================================
+            ALERTAS DE SEGUIMIENTOS
+            ====================================================== */}
+
+        {followUpAlerts.total > 0 && (
+          <section className={`${cardClasses} p-5`}>
+            <div className="mb-4 flex items-center justify-between gap-3">
+              <div>
+                <h2 className={darkMode ? "text-lg font-semibold text-white" : "text-lg font-semibold text-slate-900"}>
+                  🔔 Seguimientos para gestionar
+                </h2>
+                <p className={darkMode ? "mt-1 text-sm text-slate-400" : "mt-1 text-sm text-slate-500"}>
+                  Leads favoritos a los que ya les enviaste presupuesto.
+                </p>
+              </div>
+
+              <span className={darkMode ? "rounded-full bg-slate-800 px-3 py-1 text-sm font-semibold text-white" : "rounded-full bg-slate-100 px-3 py-1 text-sm font-semibold text-slate-700"}>
+                {followUpAlerts.total}
+              </span>
+            </div>
+
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-4">
+
+              <div className={darkMode ? "rounded-lg border border-red-900/60 bg-red-950/30 p-4" : "rounded-lg border border-red-200 bg-red-50 p-4"}>
+                <div className={darkMode ? "text-sm font-semibold text-red-300" : "text-sm font-semibold text-red-700"}>
+                  🔴 Vencidos
+                </div>
+                <div className={darkMode ? "mt-1 text-2xl font-bold text-red-200" : "mt-1 text-2xl font-bold text-red-700"}>
+                  {followUpAlerts.overdue.length}
+                </div>
+
+                {followUpAlerts.overdue.length > 0 && (
+                  <div className={darkMode ? "mt-3 space-y-1 text-xs text-red-200" : "mt-3 space-y-1 text-xs text-red-800"}>
+                    {followUpAlerts.overdue.slice(0, 3).map((followUp) => {
+                      const lead = leads.find((item) => item.id === followUp.leadId);
+
+                      return (
+                        <div key={followUp.id} className="truncate">
+                          {lead?.name || "Lead"} · {followUp.type}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+
+              <div className={darkMode ? "rounded-lg border border-orange-900/60 bg-orange-950/30 p-4" : "rounded-lg border border-orange-200 bg-orange-50 p-4"}>
+                <div className={darkMode ? "text-sm font-semibold text-orange-300" : "text-sm font-semibold text-orange-700"}>
+                  🟠 Para hoy
+                </div>
+                <div className={darkMode ? "mt-1 text-2xl font-bold text-orange-200" : "mt-1 text-2xl font-bold text-orange-700"}>
+                  {followUpAlerts.today.length}
+                </div>
+
+                {followUpAlerts.today.length > 0 && (
+                  <div className={darkMode ? "mt-3 space-y-1 text-xs text-orange-200" : "mt-3 space-y-1 text-xs text-orange-800"}>
+                    {followUpAlerts.today.slice(0, 3).map((followUp) => {
+                      const lead = leads.find((item) => item.id === followUp.leadId);
+
+                      return (
+                        <div key={followUp.id} className="truncate">
+                          {lead?.name || "Lead"} · {followUp.type}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+
+              <div className={darkMode ? "rounded-lg border border-yellow-900/60 bg-yellow-950/30 p-4" : "rounded-lg border border-yellow-200 bg-yellow-50 p-4"}>
+                <div className={darkMode ? "text-sm font-semibold text-yellow-300" : "text-sm font-semibold text-yellow-700"}>
+                  🟡 Próximos
+                </div>
+                <div className={darkMode ? "mt-1 text-2xl font-bold text-yellow-200" : "mt-1 text-2xl font-bold text-yellow-700"}>
+                  {followUpAlerts.upcoming.length}
+                </div>
+
+                {followUpAlerts.upcoming.length > 0 && (
+                  <div className={darkMode ? "mt-3 space-y-1 text-xs text-yellow-200" : "mt-3 space-y-1 text-xs text-yellow-800"}>
+                    {followUpAlerts.upcoming.slice(0, 3).map((followUp) => {
+                      const lead = leads.find((item) => item.id === followUp.leadId);
+
+                      return (
+                        <div key={followUp.id} className="truncate">
+                          {lead?.name || "Lead"} · {followUp.type}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+
+              <div className={darkMode ? "rounded-lg border border-slate-700 bg-slate-800/60 p-4" : "rounded-lg border border-slate-200 bg-slate-50 p-4"}>
+                <div className={darkMode ? "text-sm font-semibold text-slate-300" : "text-sm font-semibold text-slate-700"}>
+                  ⚪ Sin seguimiento
+                </div>
+                <div className={darkMode ? "mt-1 text-2xl font-bold text-slate-200" : "mt-1 text-2xl font-bold text-slate-700"}>
+                  {followUpAlerts.withoutFollowUp.length}
+                </div>
+
+                {followUpAlerts.withoutFollowUp.length > 0 && (
+                  <div className="mt-3 space-y-1">
+                    {followUpAlerts.withoutFollowUp.map((lead) => (
+                      <button
+                        key={lead.id}
+                        type="button"
+                        onClick={() => openLead(lead)}
+                        className={
+                          darkMode
+                            ? "block w-full truncate rounded-md px-2 py-1.5 text-left text-xs text-blue-400 hover:bg-slate-700 hover:text-blue-300"
+                            : "block w-full truncate rounded-md px-2 py-1.5 text-left text-xs text-blue-600 hover:bg-slate-100 hover:text-blue-700"
+                        }
+                      >
+                        {lead.name}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+            </div>
+          </section>
+
+        )}
 
         {/* ======================================================
             FILTROS CRM

@@ -1,4 +1,4 @@
-﻿import { NextRequest, NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { isCrmAuthenticated } from "@/lib/crm-auth";
 
@@ -30,6 +30,39 @@ export async function GET(request: NextRequest) {
     try {
         const { searchParams } = new URL(request.url);
         const leadId = searchParams.get("leadId");
+        const favorites = searchParams.get("favorites");
+
+        if (favorites === "true") {
+            const followUps = await prisma.followUp.findMany({
+                where: {
+                    lead: {
+                        favorite: true,
+                    },
+                },
+                include: {
+                    lead: {
+                        select: {
+                            id: true,
+                            name: true,
+                            category: true,
+                            city: true,
+                            province: true,
+                            phone: true,
+                            email: true,
+                        },
+                    },
+                },
+                orderBy: {
+                    date: "asc",
+                },
+            });
+
+            return NextResponse.json({
+                success: true,
+                count: followUps.length,
+                results: followUps,
+            });
+        }
 
         if (!leadId || leadId.trim() === "") {
             return NextResponse.json(
