@@ -305,7 +305,25 @@ export default function DashboardPage() {
 }, [loadLeads]);
 
   useEffect(() => {
-    void loadFavoriteFollowUps();
+    let cancelled = false;
+
+    const loadWithRetry = async () => {
+      await loadFavoriteFollowUps();
+
+      if (!cancelled) {
+        window.setTimeout(() => {
+          if (!cancelled) {
+            void loadFavoriteFollowUps();
+          }
+        }, 3000);
+      }
+    };
+
+    void loadWithRetry();
+
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   /* ============================================================
@@ -882,6 +900,7 @@ const handleManualSubmit = async (e: FormEvent) => {
       setFollowUpDescription("");
 
       await loadFollowUps(selectedLead.id);
+      await loadFavoriteFollowUps();
     } catch (err) {
       console.error(
         "[Dashboard] Error guardando seguimiento:",
