@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import {
   useCallback,
@@ -256,7 +256,7 @@ export default function DashboardPage() {
 
   const loadLeads = useCallback(async () => {
     try {
-      setLoadingLeads(true);
+      setLoadingLeads(true); console.log("[Dashboard] loadLeads: INICIO");
       setError("");
 
       const response = await fetch("/api/crm/leads", {
@@ -264,7 +264,7 @@ export default function DashboardPage() {
         cache: "no-store",
       });
 
-      if (!response.ok) {
+      console.log("[Dashboard] loadLeads: respuesta HTTP", response.status); if (!response.ok) {
         throw new Error(`Error HTTP ${response.status}`);
       }
 
@@ -286,7 +286,7 @@ export default function DashboardPage() {
           : "No se pudieron cargar los leads."
       );
     } finally {
-      setLoadingLeads(false);
+      setLoadingLeads(false); console.log("[Dashboard] loadLeads: FIN");
     }
   }, []);
 
@@ -1956,14 +1956,23 @@ const handleManualSubmit = async (e: FormEvent) => {
                 </div>
 
                 {followUpAlerts.overdue.length > 0 && (
-                  <div className={darkMode ? "mt-3 space-y-1 text-xs text-red-200" : "mt-3 space-y-1 text-xs text-red-800"}>
-                    {followUpAlerts.overdue.slice(0, 3).map((followUp) => {
+                  <div className="mt-3 max-h-32 space-y-1 overflow-y-auto pr-1">
+                    {followUpAlerts.overdue.map((followUp) => {
                       const lead = leads.find((item) => item.id === followUp.leadId);
 
                       return (
-                        <div key={followUp.id} className="truncate">
+                        <button
+                          key={followUp.id}
+                          type="button"
+                          onClick={() => lead && openLead(lead)}
+                          className={
+                            darkMode
+                              ? "block w-full truncate rounded-md px-2 py-1.5 text-left text-xs text-red-200 hover:bg-red-900/40 hover:text-white"
+                              : "block w-full truncate rounded-md px-2 py-1.5 text-left text-xs text-red-800 hover:bg-red-100 hover:text-red-900"
+                          }
+                        >
                           {lead?.name || "Lead"} · {followUp.type}
-                        </div>
+                        </button>
                       );
                     })}
                   </div>
@@ -1979,14 +1988,23 @@ const handleManualSubmit = async (e: FormEvent) => {
                 </div>
 
                 {followUpAlerts.today.length > 0 && (
-                  <div className={darkMode ? "mt-3 space-y-1 text-xs text-orange-200" : "mt-3 space-y-1 text-xs text-orange-800"}>
-                    {followUpAlerts.today.slice(0, 3).map((followUp) => {
+                  <div className="mt-3 max-h-32 space-y-1 overflow-y-auto pr-1">
+                    {followUpAlerts.today.map((followUp) => {
                       const lead = leads.find((item) => item.id === followUp.leadId);
 
                       return (
-                        <div key={followUp.id} className="truncate">
+                        <button
+                          key={followUp.id}
+                          type="button"
+                          onClick={() => lead && openLead(lead)}
+                          className={
+                            darkMode
+                              ? "block w-full truncate rounded-md px-2 py-1.5 text-left text-xs text-orange-200 hover:bg-orange-900/40 hover:text-white"
+                              : "block w-full truncate rounded-md px-2 py-1.5 text-left text-xs text-orange-800 hover:bg-orange-100 hover:text-orange-900"
+                          }
+                        >
                           {lead?.name || "Lead"} · {followUp.type}
-                        </div>
+                        </button>
                       );
                     })}
                   </div>
@@ -2002,14 +2020,23 @@ const handleManualSubmit = async (e: FormEvent) => {
                 </div>
 
                 {followUpAlerts.upcoming.length > 0 && (
-                  <div className={darkMode ? "mt-3 space-y-1 text-xs text-yellow-200" : "mt-3 space-y-1 text-xs text-yellow-800"}>
-                    {followUpAlerts.upcoming.slice(0, 3).map((followUp) => {
+                  <div className="mt-3 max-h-32 space-y-1 overflow-y-auto pr-1">
+                    {followUpAlerts.upcoming.map((followUp) => {
                       const lead = leads.find((item) => item.id === followUp.leadId);
 
                       return (
-                        <div key={followUp.id} className="truncate">
+                        <button
+                          key={followUp.id}
+                          type="button"
+                          onClick={() => lead && openLead(lead)}
+                          className={
+                            darkMode
+                              ? "block w-full truncate rounded-md px-2 py-1.5 text-left text-xs text-yellow-200 hover:bg-yellow-900/40 hover:text-white"
+                              : "block w-full truncate rounded-md px-2 py-1.5 text-left text-xs text-yellow-800 hover:bg-yellow-100 hover:text-yellow-900"
+                          }
+                        >
                           {lead?.name || "Lead"} · {followUp.type}
-                        </div>
+                        </button>
                       );
                     })}
                   </div>
@@ -3354,4 +3381,5 @@ function DetailItem({
     </div>
   );
 }
+
 
